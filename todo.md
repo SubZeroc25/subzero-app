@@ -23,3 +23,13 @@
 ## Bug Fixes
 
 - [x] OAuth redirect URI using manus* scheme instead of exp://
+
+## New Features
+
+- [x] Gmail OAuth integration in onboarding
+- [x] Outlook OAuth integration in onboarding
+- [x] Email provider selection screen
+- [ ] Subscription swipe-to-delete gesture
+- [x] Subscription tap-to-edit modal
+- [x] Edit subscription form with all fields
+- [ ] End-to-end OAuth testing verification

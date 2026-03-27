@@ -197,8 +197,12 @@ export default function SubscriptionsScreen() {
           renderItem={({ item }) => {
             const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.other;
             return (
-              <View className="bg-surface rounded-xl border border-border p-4 mb-3">
-                <View className="flex-row items-center justify-between">
+              <Pressable
+                onPress={() => router.push(`/edit-subscription?id=${item.id}` as any)}
+                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
+              >
+                <View className="bg-surface rounded-xl border border-border p-4 mb-3">
+                  <View className="flex-row items-center justify-between">
                   <View className="flex-row items-center gap-3 flex-1">
                     <View
                       className="w-11 h-11 rounded-xl items-center justify-center"
@@ -284,8 +288,9 @@ export default function SubscriptionsScreen() {
                   >
                     <Text className="text-xs font-medium text-error">Remove</Text>
                   </Pressable>
+                  </View>
                 </View>
-              </View>
+              </Pressable>
             );
           }}
         />

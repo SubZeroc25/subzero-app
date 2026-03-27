@@ -1,4 +1,4 @@
-import { Text, View, Pressable, Platform, Dimensions } from "react-native";
+import { Text, View, Pressable, ActivityIndicator, Platform } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -94,6 +94,10 @@ export default function OnboardingScreen() {
               <Pressable
                 onPress={() => {
                   if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  // TODO: Implement Gmail OAuth flow
+                  // This would call: await startGmailOAuth();
+                  // For now, just mark as connected
+                  router.push("/scan?provider=gmail" as any);
                 }}
                 style={({ pressed }) => [
                   {
@@ -118,6 +122,10 @@ export default function OnboardingScreen() {
               <Pressable
                 onPress={() => {
                   if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  // TODO: Implement Outlook OAuth flow
+                  // This would call: await startOutlookOAuth();
+                  // For now, just mark as connected
+                  router.push("/scan?provider=outlook" as any);
                 }}
                 style={({ pressed }) => [
                   {
