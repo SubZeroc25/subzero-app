@@ -19,3 +19,7 @@
 - [x] Auth guard (redirect unauthenticated users)
 - [x] App context/state management (subscriptions, user profile)
 - [x] App logo generation and branding
+
+## Bug Fixes
+
+- [x] OAuth redirect URI using manus* scheme instead of exp://
