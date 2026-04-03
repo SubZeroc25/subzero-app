@@ -29,10 +29,10 @@
 - [x] Gmail OAuth integration in onboarding
 - [x] Outlook OAuth integration in onboarding
 - [x] Email provider selection screen
-- [ ] Subscription swipe-to-delete gesture
+- [x] Subscription swipe-to-delete gesture
 - [x] Subscription tap-to-edit modal
 - [x] Edit subscription form with all fields
-- [ ] End-to-end OAuth testing verification
+- [x] End-to-end OAuth testing verification
 
 ## Phase 2: Enhanced Features
 
@@ -62,3 +62,29 @@
 - [x] Fix session token name field empty causing verification failure
 - [x] Use WebBrowser.openAuthSessionAsync for native OAuth flow
 - [x] Add native deep link redirect from server OAuth callback
+
+## Phase 5: External Service Integrations
+
+### Gmail API Integration
+- [x] Gmail OAuth consent screen configuration
+- [x] Gmail API credential environment variables
+- [x] Gmail OAuth flow (authorize, token exchange, refresh)
+- [x] Gmail API email fetching service (real inbox scanning)
+- [x] Gmail token storage in database
+- [x] Gmail connection status in Profile screen
+
+### Stripe Integration
+- [x] Stripe API credential environment variables
+- [x] Stripe checkout session creation (Pro plan)
+- [x] Stripe webhook handler (payment events)
+- [x] Stripe customer portal for subscription management
+- [x] Pro plan activation on successful payment
+- [x] Billing status display in Profile screen
+
+## Bug Fixes (Phase 6)
+
+- [x] Fix dev server connectivity issue (Metro bundler not reachable)
+- [x] Fix Google OAuth 403 error on sign-in
+- [x] Fix email provider callback URLs using localhost instead of public URL
+- [x] Fix email-scanner.ts import paths
+- [x] Fix test mocks for new getEmailToken function

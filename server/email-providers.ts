@@ -24,10 +24,16 @@ function getOutlookCredentials() {
 }
 
 /**
- * Get API base URL for OAuth callbacks
+ * Get API base URL for OAuth callbacks.
+ * Prefers the public-facing API URL so external OAuth providers (Google, Microsoft)
+ * can redirect back to a reachable endpoint.
  */
 function getApiUrl() {
-  return process.env.API_URL || "http://localhost:3000";
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    process.env.API_URL ||
+    "http://localhost:3000"
+  );
 }
 
 export interface OAuthConfig {

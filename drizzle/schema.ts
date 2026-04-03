@@ -23,6 +23,9 @@ export const userProfiles = mysqlTable("user_profiles", {
   notificationsEnabled: boolean("notificationsEnabled").default(true).notNull(),
   scansThisMonth: int("scansThisMonth").default(0).notNull(),
   lastScanReset: timestamp("lastScanReset").defaultNow().notNull(),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+  stripeCurrentPeriodEnd: timestamp("stripeCurrentPeriodEnd"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -58,6 +61,18 @@ export const scanJobs = mysqlTable("scan_jobs", {
   completedAt: timestamp("completedAt"),
 });
 
+export const emailTokens = mysqlTable("email_tokens", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  provider: mysqlEnum("provider", ["gmail", "outlook"]).notNull(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken"),
+  expiresAt: timestamp("expiresAt"),
+  email: varchar("email", { length: 320 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type UserProfile = typeof userProfiles.$inferSelect;
@@ -66,3 +81,5 @@ export type Subscription = typeof subscriptions.$inferSelect;
 export type InsertSubscription = typeof subscriptions.$inferInsert;
 export type ScanJob = typeof scanJobs.$inferSelect;
 export type InsertScanJob = typeof scanJobs.$inferInsert;
+export type EmailToken = typeof emailTokens.$inferSelect;
+export type InsertEmailToken = typeof emailTokens.$inferInsert;

@@ -1,9 +1,16 @@
-import { ScrollView, Text, View, Pressable, Platform, Alert } from "react-native";
+import { ScrollView, Text, View, Pressable, Platform, Alert, ActivityIndicator } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
+import { useState } from "react";
+import Constants from "expo-constants";
+
+const API_BASE = Constants.expoConfig?.extra?.apiBaseUrl
+  || process.env.EXPO_PUBLIC_API_BASE_URL
+  || "http://localhost:3000";
 
 const freeFeatures = [
   { text: "1 email scan per month", included: true },
@@ -31,16 +38,36 @@ export default function PricingScreen() {
   const router = useRouter();
   const colors = useColors();
 
-  const handleUpgrade = () => {
-    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    if (Platform.OS === "web") {
-      alert("Stripe integration coming soon! Pro features will be available shortly.");
-    } else {
-      Alert.alert(
-        "Coming Soon",
-        "Stripe integration is being set up. Pro features will be available shortly.",
-        [{ text: "OK" }]
-      );
+  const [loading, setLoading] = useState(false);
+
+  const handleUpgrade = async () => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/api/billing/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+      });
+      const data = await response.json();
+
+      if (response.ok && data.url) {
+        await WebBrowser.openBrowserAsync(data.url);
+      } else if (data.configured === false) {
+        const msg = "Stripe is being set up. Pro features will be available shortly.";
+        if (Platform.OS === "web") alert(msg);
+        else Alert.alert("Coming Soon", msg);
+      } else {
+        const msg = data.error || "Failed to start checkout.";
+        if (Platform.OS === "web") alert(msg);
+        else Alert.alert("Error", msg);
+      }
+    } catch (error) {
+      const msg = "Stripe integration coming soon! Pro features will be available shortly.";
+      if (Platform.OS === "web") alert(msg);
+      else Alert.alert("Coming Soon", msg);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -131,9 +158,13 @@ export default function PricingScreen() {
             ]}
           >
             <IconSymbol name="crown.fill" size={20} color="#FFFFFF" />
-            <Text className="text-white text-base font-semibold">
-              Upgrade to Pro
-            </Text>
+            {loading ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text className="text-white text-base font-semibold">
+                Upgrade to Pro
+              </Text>
+            )}
           </Pressable>
 
           <Pressable

@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, Platform, Switch, Alert } from "react-native";
+import { ScrollView, Text, View, Pressable, Platform, Switch, Alert, ActivityIndicator } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -6,6 +6,13 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
+import { useState, useCallback } from "react";
+import Constants from "expo-constants";
+
+const API_BASE = Constants.expoConfig?.extra?.apiBaseUrl
+  || process.env.EXPO_PUBLIC_API_BASE_URL
+  || "http://localhost:3000";
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -19,6 +26,163 @@ export default function ProfileScreen() {
 
   const profile = profileQuery.data;
   const isPro = profile?.plan === "pro";
+
+  const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
+  const [billingLoading, setBillingLoading] = useState(false);
+
+  const handleConnectEmail = useCallback(async (provider: "gmail" | "outlook") => {
+    setConnectingProvider(provider);
+    try {
+      // Build auth headers for native (Bearer token)
+      const headers: Record<string, string> = {};
+      if (Platform.OS !== "web") {
+        const { getSessionToken } = await import("@/lib/_core/auth");
+        const token = await getSessionToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${API_BASE}/api/email/${provider}/authorize`, {
+        credentials: "include",
+        headers,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.configured === false) {
+          Alert.alert(
+            `${provider === "gmail" ? "Gmail" : "Outlook"} Not Configured`,
+            `${provider === "gmail" ? "Gmail" : "Outlook"} OAuth credentials are not set up yet. Please add ${provider.toUpperCase()}_CLIENT_ID and ${provider.toUpperCase()}_CLIENT_SECRET in the Secrets panel.`,
+          );
+        } else {
+          Alert.alert("Error", data.error || "Failed to start authorization");
+        }
+        return;
+      }
+
+      if (data.url) {
+        if (Platform.OS !== "web") {
+          // On native, use openAuthSessionAsync so the browser can redirect back
+          // The callback URL will be the frontend URL with query params
+          const frontendUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/^(https?:\/\/)3000-/, "$18081-") || "http://localhost:8081";
+          const result = await WebBrowser.openAuthSessionAsync(data.url, frontendUrl);
+          console.log(`[Profile] ${provider} auth session result:`, result);
+        } else {
+          // On web, open in same window so cookies work
+          window.location.href = data.url;
+          return; // Don't refetch, page will reload
+        }
+        // Refetch profile after returning from browser
+        profileQuery.refetch();
+      }
+    } catch (error) {
+      console.error(`[Profile] Connect ${provider} failed:`, error);
+      Alert.alert("Error", `Failed to connect ${provider === "gmail" ? "Gmail" : "Outlook"}`);
+    } finally {
+      setConnectingProvider(null);
+    }
+  }, [profileQuery]);
+
+  const handleDisconnectEmail = useCallback(async (provider: "gmail" | "outlook") => {
+    const providerName = provider === "gmail" ? "Gmail" : "Outlook";
+    const doDisconnect = async () => {
+      try {
+        // Build auth headers for native (Bearer token)
+        const headers: Record<string, string> = {};
+        if (Platform.OS !== "web") {
+          const { getSessionToken } = await import("@/lib/_core/auth");
+          const token = await getSessionToken();
+          if (token) headers["Authorization"] = `Bearer ${token}`;
+        }
+        const response = await fetch(`${API_BASE}/api/email/${provider}/disconnect`, {
+          method: "POST",
+          credentials: "include",
+          headers,
+        });
+        if (response.ok) {
+          if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          profileQuery.refetch();
+        }
+      } catch (error) {
+        Alert.alert("Error", `Failed to disconnect ${providerName}`);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (confirm(`Disconnect ${providerName}?`)) doDisconnect();
+    } else {
+      Alert.alert(`Disconnect ${providerName}`, `This will remove your ${providerName} connection. You can reconnect anytime.`, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Disconnect", style: "destructive", onPress: doDisconnect },
+      ]);
+    }
+  }, [profileQuery]);
+
+  const handleUpgrade = useCallback(async () => {
+    setBillingLoading(true);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (Platform.OS !== "web") {
+        const { getSessionToken } = await import("@/lib/_core/auth");
+        const token = await getSessionToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await fetch(`${API_BASE}/api/billing/checkout`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.configured === false) {
+          // Stripe not configured - show pricing page instead
+          router.push("/pricing" as any);
+        } else {
+          Alert.alert("Error", data.error || "Failed to start checkout");
+        }
+        return;
+      }
+
+      if (data.url) {
+        await WebBrowser.openBrowserAsync(data.url);
+        profileQuery.refetch();
+      }
+    } catch (error) {
+      console.error("[Profile] Checkout failed:", error);
+      router.push("/pricing" as any);
+    } finally {
+      setBillingLoading(false);
+    }
+  }, [router, profileQuery]);
+
+  const handleManageBilling = useCallback(async () => {
+    setBillingLoading(true);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (Platform.OS !== "web") {
+        const { getSessionToken } = await import("@/lib/_core/auth");
+        const token = await getSessionToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+      const response = await fetch(`${API_BASE}/api/billing/portal`, {
+        method: "POST",
+        headers,
+        credentials: "include",
+      });
+      const data = await response.json();
+
+      if (response.ok && data.url) {
+        await WebBrowser.openBrowserAsync(data.url);
+        profileQuery.refetch();
+      } else {
+        Alert.alert("Info", "Billing portal is not available yet.");
+      }
+    } catch (error) {
+      Alert.alert("Error", "Failed to open billing portal");
+    } finally {
+      setBillingLoading(false);
+    }
+  }, [profileQuery]);
 
   const handleLogout = () => {
     const doLogout = () => {
@@ -99,13 +263,11 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        {/* Plan */}
-        {!isPro && (
+        {/* Upgrade / Manage Billing */}
+        {!isPro ? (
           <Pressable
-            onPress={() => {
-              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/pricing" as any);
-            }}
+            onPress={handleUpgrade}
+            disabled={billingLoading}
             style={({ pressed }) => [
               {
                 backgroundColor: colors.primary + "08",
@@ -128,7 +290,43 @@ export default function ProfileScreen() {
               <Text className="text-sm font-semibold text-foreground">Upgrade to Pro</Text>
               <Text className="text-xs text-muted">Unlimited scans, full analytics, and more</Text>
             </View>
-            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            {billingLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            )}
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={handleManageBilling}
+            disabled={billingLoading}
+            style={({ pressed }) => [
+              {
+                backgroundColor: colors.success + "08",
+                borderWidth: 1,
+                borderColor: colors.success + "30",
+                borderRadius: 16,
+                padding: 16,
+                marginBottom: 16,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: colors.success + "15" }}>
+              <IconSymbol name="crown.fill" size={20} color={colors.success} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-foreground">Pro Plan Active</Text>
+              <Text className="text-xs text-muted">Manage billing and subscription</Text>
+            </View>
+            {billingLoading ? (
+              <ActivityIndicator size="small" color={colors.success} />
+            ) : (
+              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+            )}
           </Pressable>
         )}
 
@@ -139,39 +337,97 @@ export default function ProfileScreen() {
               Connected Accounts
             </Text>
           </View>
+
+          {/* Gmail */}
           <View className="px-5 py-3 flex-row items-center justify-between border-b border-border">
-            <View className="flex-row items-center gap-3">
+            <View className="flex-row items-center gap-3 flex-1">
               <IconSymbol name="envelope.fill" size={20} color="#EA4335" />
-              <Text className="text-sm text-foreground">Gmail</Text>
+              <View>
+                <Text className="text-sm text-foreground">Gmail</Text>
+                {profile?.connectedGmail && (
+                  <Text className="text-xs text-muted">Connected</Text>
+                )}
+              </View>
             </View>
-            <View
-              className="px-2.5 py-1 rounded-full"
-              style={{ backgroundColor: profile?.connectedGmail ? colors.success + "15" : colors.muted + "15" }}
-            >
-              <Text
-                className="text-xs font-medium"
-                style={{ color: profile?.connectedGmail ? colors.success : colors.muted }}
+            {connectingProvider === "gmail" ? (
+              <ActivityIndicator size="small" color="#EA4335" />
+            ) : profile?.connectedGmail ? (
+              <Pressable
+                onPress={() => handleDisconnectEmail("gmail")}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    backgroundColor: colors.error + "15",
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
               >
-                {profile?.connectedGmail ? "Connected" : "Not connected"}
-              </Text>
-            </View>
+                <Text className="text-xs font-medium" style={{ color: colors.error }}>Disconnect</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => handleConnectEmail("gmail")}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    backgroundColor: colors.primary + "15",
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text className="text-xs font-medium" style={{ color: colors.primary }}>Connect</Text>
+              </Pressable>
+            )}
           </View>
+
+          {/* Outlook */}
           <View className="px-5 py-3 flex-row items-center justify-between">
-            <View className="flex-row items-center gap-3">
+            <View className="flex-row items-center gap-3 flex-1">
               <IconSymbol name="envelope.fill" size={20} color="#0078D4" />
-              <Text className="text-sm text-foreground">Outlook</Text>
+              <View>
+                <Text className="text-sm text-foreground">Outlook</Text>
+                {profile?.connectedOutlook && (
+                  <Text className="text-xs text-muted">Connected</Text>
+                )}
+              </View>
             </View>
-            <View
-              className="px-2.5 py-1 rounded-full"
-              style={{ backgroundColor: profile?.connectedOutlook ? colors.success + "15" : colors.muted + "15" }}
-            >
-              <Text
-                className="text-xs font-medium"
-                style={{ color: profile?.connectedOutlook ? colors.success : colors.muted }}
+            {connectingProvider === "outlook" ? (
+              <ActivityIndicator size="small" color="#0078D4" />
+            ) : profile?.connectedOutlook ? (
+              <Pressable
+                onPress={() => handleDisconnectEmail("outlook")}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    backgroundColor: colors.error + "15",
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
               >
-                {profile?.connectedOutlook ? "Connected" : "Not connected"}
-              </Text>
-            </View>
+                <Text className="text-xs font-medium" style={{ color: colors.error }}>Disconnect</Text>
+              </Pressable>
+            ) : (
+              <Pressable
+                onPress={() => handleConnectEmail("outlook")}
+                style={({ pressed }) => [
+                  {
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 8,
+                    backgroundColor: colors.primary + "15",
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
+              >
+                <Text className="text-xs font-medium" style={{ color: colors.primary }}>Connect</Text>
+              </Pressable>
+            )}
           </View>
         </View>
 
@@ -184,7 +440,7 @@ export default function ProfileScreen() {
           <View className="px-5 py-3 flex-row items-center justify-between border-b border-border">
             <View className="flex-row items-center gap-3">
               <IconSymbol name="bell.fill" size={20} color={colors.primary} />
-              <Text className="text-sm text-foreground">Notifications</Text>
+              <Text className="text-sm text-foreground">Renewal Reminders</Text>
             </View>
             <Switch
               value={profile?.notificationsEnabled ?? true}
@@ -253,7 +509,7 @@ export default function ProfileScreen() {
           <View className="flex-row items-center justify-between">
             <Text className="text-sm text-foreground">Scans this month</Text>
             <Text className="text-sm font-semibold text-foreground">
-              {profile?.scansThisMonth ?? 0} / {isPro ? "∞" : "1"}
+              {profile?.scansThisMonth ?? 0} / {isPro ? "\u221E" : "1"}
             </Text>
           </View>
         </View>

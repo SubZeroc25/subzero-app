@@ -5,6 +5,7 @@ import {
   InsertUserProfile, userProfiles,
   InsertSubscription, subscriptions,
   InsertScanJob, scanJobs,
+  InsertEmailToken, emailTokens,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -153,6 +154,65 @@ export async function getScanJob(id: number) {
   const db = await getDb();
   if (!db) return null;
   const result = await db.select().from(scanJobs).where(eq(scanJobs.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+// ── Email Tokens ─────────────────────────────────────
+export async function saveEmailToken(data: InsertEmailToken) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  // Upsert: if user already has a token for this provider, update it
+  const existing = await db.select().from(emailTokens).where(
+    and(eq(emailTokens.userId, data.userId), eq(emailTokens.provider, data.provider))
+  ).limit(1);
+  if (existing.length > 0) {
+    await db.update(emailTokens).set({
+      accessToken: data.accessToken,
+      refreshToken: data.refreshToken,
+      expiresAt: data.expiresAt,
+      email: data.email,
+    }).where(eq(emailTokens.id, existing[0].id));
+    return existing[0].id;
+  }
+  const result = await db.insert(emailTokens).values(data);
+  return result[0].insertId;
+}
+
+export async function getEmailToken(userId: number, provider: "gmail" | "outlook") {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(emailTokens).where(
+    and(eq(emailTokens.userId, userId), eq(emailTokens.provider, provider))
+  ).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function deleteEmailToken(userId: number, provider: "gmail" | "outlook") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(emailTokens).where(
+    and(eq(emailTokens.userId, userId), eq(emailTokens.provider, provider))
+  );
+}
+
+// ── Stripe ───────────────────────────────────────────
+export async function updateStripeCustomer(userId: number, data: {
+  stripeCustomerId?: string;
+  stripeSubscriptionId?: string | null;
+  stripeCurrentPeriodEnd?: Date | null;
+  plan?: "free" | "pro";
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(userProfiles).set(data).where(eq(userProfiles.userId, userId));
+}
+
+export async function getProfileByStripeCustomerId(stripeCustomerId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(userProfiles).where(
+    eq(userProfiles.stripeCustomerId, stripeCustomerId)
+  ).limit(1);
   return result.length > 0 ? result[0] : null;
 }
 

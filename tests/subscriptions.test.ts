@@ -74,6 +74,9 @@ vi.mock("../server/db", () => ({
     completedAt: new Date(),
   }),
   getUserScanJobs: vi.fn().mockResolvedValue([]),
+  getEmailToken: vi.fn().mockResolvedValue(null),
+  saveEmailToken: vi.fn().mockResolvedValue(undefined),
+  deleteEmailToken: vi.fn().mockResolvedValue(undefined),
   getSpendingAnalytics: vi.fn().mockResolvedValue({
     totalMonthly: 184.63,
     totalYearly: 2215.56,

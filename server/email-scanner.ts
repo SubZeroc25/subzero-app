@@ -3,8 +3,8 @@
  * Fetches emails from Gmail and Outlook and extracts subscription information
  */
 
-import { getOAuthConfig, type EmailProvider } from "@/server/email-providers";
-import { extractSubscriptionsFromEmail } from "@/server/ai-extraction";
+import { getOAuthConfig, type EmailProvider } from "./email-providers";
+import { extractSubscriptionsFromEmail } from "./ai-extraction";
 
 export interface EmailMessage {
   id: string;

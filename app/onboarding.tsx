@@ -1,11 +1,13 @@
-import { Text, View, Pressable, ActivityIndicator, Platform } from "react-native";
+import { Text, View, Pressable, Platform, Alert } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
+import * as WebBrowser from "expo-web-browser";
 import { useState, useCallback } from "react";
 import { trpc } from "@/lib/trpc";
+import { getApiBaseUrl } from "@/constants/oauth";
 
 const steps = [
   {
@@ -35,6 +37,7 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const colors = useColors();
   const [currentStep, setCurrentStep] = useState(0);
+  const [connecting, setConnecting] = useState<string | null>(null);
   const profileUpdate = trpc.profile.update.useMutation();
 
   const handleNext = useCallback(() => {
@@ -56,6 +59,63 @@ export default function OnboardingScreen() {
 
   const handleSkip = useCallback(() => {
     handleComplete();
+  }, []);
+
+  const handleConnectProvider = useCallback(async (provider: "gmail" | "outlook") => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setConnecting(provider);
+
+    try {
+      const apiBase = getApiBaseUrl();
+      // Build auth headers for native (Bearer token)
+      const headers: Record<string, string> = {};
+      if (Platform.OS !== "web") {
+        const { getSessionToken } = await import("@/lib/_core/auth");
+        const token = await getSessionToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`${apiBase}/api/email/${provider}/authorize`, {
+        credentials: "include",
+        headers,
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (data.configured === false) {
+          const providerName = provider === "gmail" ? "Gmail" : "Outlook";
+          Alert.alert(
+            `${providerName} Not Configured`,
+            `${providerName} OAuth credentials are not set up yet. You can connect later from your Profile.`,
+          );
+          // Skip to next step
+          setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
+        } else {
+          Alert.alert("Error", data.error || "Failed to start authorization");
+        }
+        return;
+      }
+
+      if (data.url) {
+        if (Platform.OS !== "web") {
+          const frontendUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/^(https?:\/\/)3000-/, "$18081-") || "http://localhost:8081";
+          const result = await WebBrowser.openAuthSessionAsync(data.url, frontendUrl);
+          console.log(`[Onboarding] ${provider} auth result:`, result);
+          if (result.type === "success") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            // Move to next step after successful connection
+            setCurrentStep((s) => Math.min(s + 1, steps.length - 1));
+          }
+        } else {
+          window.location.href = data.url;
+        }
+      }
+    } catch (error) {
+      console.error(`[Onboarding] Connect ${provider} failed:`, error);
+      Alert.alert("Error", `Failed to connect ${provider === "gmail" ? "Gmail" : "Outlook"}`);
+    } finally {
+      setConnecting(null);
+    }
   }, []);
 
   const step = steps[currentStep];
@@ -92,13 +152,8 @@ export default function OnboardingScreen() {
           {currentStep === 1 && (
             <View className="w-full mt-8 gap-3">
               <Pressable
-                onPress={() => {
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  // TODO: Implement Gmail OAuth flow
-                  // This would call: await startGmailOAuth();
-                  // For now, just mark as connected
-                  router.push("/scan?provider=gmail" as any);
-                }}
+                onPress={() => handleConnectProvider("gmail")}
+                disabled={connecting !== null}
                 style={({ pressed }) => [
                   {
                     backgroundColor: colors.surface,
@@ -110,23 +165,18 @@ export default function OnboardingScreen() {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 10,
-                    opacity: pressed ? 0.8 : 1,
+                    opacity: pressed || connecting === "gmail" ? 0.6 : 1,
                   },
                 ]}
               >
                 <IconSymbol name="envelope.fill" size={20} color="#EA4335" />
                 <Text className="text-foreground text-base font-medium">
-                  Connect Gmail
+                  {connecting === "gmail" ? "Connecting..." : "Connect Gmail"}
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => {
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  // TODO: Implement Outlook OAuth flow
-                  // This would call: await startOutlookOAuth();
-                  // For now, just mark as connected
-                  router.push("/scan?provider=outlook" as any);
-                }}
+                onPress={() => handleConnectProvider("outlook")}
+                disabled={connecting !== null}
                 style={({ pressed }) => [
                   {
                     backgroundColor: colors.surface,
@@ -138,13 +188,13 @@ export default function OnboardingScreen() {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: 10,
-                    opacity: pressed ? 0.8 : 1,
+                    opacity: pressed || connecting === "outlook" ? 0.6 : 1,
                   },
                 ]}
               >
                 <IconSymbol name="envelope.fill" size={20} color="#0078D4" />
                 <Text className="text-foreground text-base font-medium">
-                  Connect Outlook
+                  {connecting === "outlook" ? "Connecting..." : "Connect Outlook"}
                 </Text>
               </Pressable>
               <Text className="text-xs text-muted text-center mt-2">

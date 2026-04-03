@@ -43,12 +43,10 @@ describe("Email Provider OAuth Configuration", async () => {
 
   it("should construct correct redirect URIs", () => {
     const gmailConfig = getOAuthConfig("gmail");
-    expect(gmailConfig.redirectUri).toContain("localhost:3000");
-    expect(gmailConfig.redirectUri).toContain("gmail/callback");
+    expect(gmailConfig.redirectUri).toContain("/api/oauth/gmail/callback");
 
     const outlookConfig = getOAuthConfig("outlook");
-    expect(outlookConfig.redirectUri).toContain("localhost:3000");
-    expect(outlookConfig.redirectUri).toContain("outlook/callback");
+    expect(outlookConfig.redirectUri).toContain("/api/oauth/outlook/callback");
   });
 
   it("should throw error for unknown provider", () => {
