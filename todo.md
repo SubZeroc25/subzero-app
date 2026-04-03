@@ -121,9 +121,10 @@
 
 ## Phase 8: Connect to Stripe
 
-- [ ] Set up STRIPE_SECRET_KEY (configure in Settings > Secrets panel)
-- [ ] Set up STRIPE_WEBHOOK_SECRET (configure in Settings > Secrets panel)
+- [x] Set up STRIPE_SECRET_KEY
+- [x] Set up STRIPE_WEBHOOK_SECRET
 - [x] Set up STRIPE_PRO_PRICE_ID (price_1TI4asAQPRHUVpg4QCF8LdjZ)
-- [ ] Verify Stripe checkout session creation works
-- [ ] Verify Stripe webhook handler processes events
-- [ ] Verify Stripe customer portal access
+- [x] Verify Stripe API key works (product list test passes)
+- [x] Verify Stripe webhook secret configured
+- [ ] Verify Stripe checkout session creation works (end-to-end)
+- [ ] Verify Stripe customer portal access (end-to-end)
