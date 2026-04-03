@@ -2,6 +2,8 @@ import "dotenv/config";
 import express from "express";
 import { createServer } from "http";
 import net from "net";
+import path from "path";
+import { fileURLToPath } from "url";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
 import { registerOAuthRoutes } from "./oauth";
 import { registerExternalRoutes } from "../external-routes";
@@ -69,6 +71,25 @@ async function startServer() {
       createContext,
     }),
   );
+
+  // Serve static web export in production
+  if (process.env.NODE_ENV === "production") {
+    const __filename = fileURLToPath(import.meta.url);
+    const __dirname = path.dirname(__filename);
+    const webDir = path.join(__dirname, "web");
+    app.use(express.static(webDir));
+    // SPA fallback: serve index.html for non-API routes
+    app.get("*", (req, res, next) => {
+      if (req.path.startsWith("/api/")) return next();
+      const htmlFile = path.join(webDir, req.path + ".html");
+      const fs = require("fs");
+      if (fs.existsSync(htmlFile)) {
+        res.sendFile(htmlFile);
+      } else {
+        res.sendFile(path.join(webDir, "index.html"));
+      }
+    });
+  }
 
   const preferredPort = parseInt(process.env.PORT || "3000");
   const port = await findAvailablePort(preferredPort);

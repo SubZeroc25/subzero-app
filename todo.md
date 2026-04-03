@@ -211,3 +211,9 @@
 ## Phase 15: APK Build Fix
 
 - [x] Fix Gradle build failure: react-native-gesture-handler compileReleaseJavaWithJavac dependency resolution (pinned kotlinVersion=2.1.20, compileSdkVersion=36, targetSdkVersion=36)
+
+## Phase 16: Web Deployment Fix
+
+- [x] Add static file serving to production server for web export
+- [x] Update build script to include expo web export alongside server build
+- [x] Verify dist/web contains all static HTML pages and assets
