@@ -118,3 +118,12 @@
 - [ ] Dark mode toggle in Profile
 - [ ] Skeleton loading states
 - [ ] Animated transitions between screens
+
+## Phase 8: Connect to Stripe
+
+- [ ] Set up STRIPE_SECRET_KEY (configure in Settings > Secrets panel)
+- [ ] Set up STRIPE_WEBHOOK_SECRET (configure in Settings > Secrets panel)
+- [x] Set up STRIPE_PRO_PRICE_ID (price_1TI4asAQPRHUVpg4QCF8LdjZ)
+- [ ] Verify Stripe checkout session creation works
+- [ ] Verify Stripe webhook handler processes events
+- [ ] Verify Stripe customer portal access
