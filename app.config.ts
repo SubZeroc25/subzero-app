@@ -86,6 +86,7 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    "./plugins/withMinSdkVersion",
     [
       "expo-audio",
       {
@@ -120,6 +121,7 @@ const config: ExpoConfig = {
           compileSdkVersion: 36,
           targetSdkVersion: 36,
           kotlinVersion: "2.1.20",
+          extraProGuardRules: "-keep class com.facebook.hermes.** { *; }",
         },
       },
     ],

@@ -222,3 +222,10 @@
 
 - [x] Fix backend deployment: Metro crashes in Docker during expo web export - revert to server-only build
 - [x] Fix APK build: set minSdkVersion to 24 for react-native-worklets compatibility (already set)
+
+## Phase 18: Fix APK Build minSdkVersion (expo-build-properties not applied)
+
+- [x] Force minSdkVersion 24 via custom config plugin (withMinSdkVersion.js) that:
+  - Forces gradle.properties android.minSdkVersion=24
+  - Adds afterEvaluate block to root build.gradle enforcing minSdkVersion >= 24 on all subprojects
+  - Adds cleanStaleCxxCache pre-build task to clear stale NDK .cxx directories
