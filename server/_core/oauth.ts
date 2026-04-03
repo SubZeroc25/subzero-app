@@ -3,6 +3,7 @@ import type { Express, Request, Response } from "express";
 import { getUserByOpenId, upsertUser } from "../db";
 import { getSessionCookieOptions } from "./cookies";
 import { sdk } from "./sdk";
+import { ENV } from "./env";
 
 function getQueryParam(req: Request, key: string): string | undefined {
   const value = req.query[key];
@@ -61,7 +62,32 @@ function buildUserResponse(
   };
 }
 
+/**
+ * Detect if the OAuth callback was initiated from a native app.
+ * The state parameter contains the base64-encoded redirect URI.
+ * If it contains a manus* scheme, it's from a native app.
+ */
+function isNativeCallback(state: string): { isNative: boolean; appScheme?: string } {
+  try {
+    const decoded = atob(state);
+    // Check if the redirect URI uses a manus* deep link scheme
+    const match = decoded.match(/^(manus\d+):\/\//);
+    if (match) {
+      return { isNative: true, appScheme: match[1] };
+    }
+    return { isNative: false };
+  } catch {
+    return { isNative: false };
+  }
+}
+
 export function registerOAuthRoutes(app: Express) {
+  /**
+   * OAuth callback handler.
+   * 
+   * For web: Sets cookie and redirects to frontend URL.
+   * For native: Redirects to the app's deep link scheme with session token.
+   */
   app.get("/api/oauth/callback", async (req: Request, res: Response) => {
     const code = getQueryParam(req, "code");
     const state = getQueryParam(req, "state");
@@ -74,22 +100,33 @@ export function registerOAuthRoutes(app: Express) {
     try {
       const tokenResponse = await sdk.exchangeCodeForToken(code, state);
       const userInfo = await sdk.getUserInfo(tokenResponse.accessToken);
-      await syncUser(userInfo);
+      const user = await syncUser(userInfo);
       const sessionToken = await sdk.createSessionToken(userInfo.openId!, {
-        name: userInfo.name || "",
+        name: userInfo.name || "user",
         expiresInMs: ONE_YEAR_MS,
       });
 
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-      // Redirect to the frontend URL (Expo web on port 8081)
-      // Cookie is set with parent domain so it works across both 3000 and 8081 subdomains
-      const frontendUrl =
-        process.env.EXPO_WEB_PREVIEW_URL ||
-        process.env.EXPO_PACKAGER_PROXY_URL ||
-        "http://localhost:8081";
-      res.redirect(302, frontendUrl);
+      // Check if this callback was initiated from a native app
+      const { isNative, appScheme } = isNativeCallback(state);
+
+      if (isNative && appScheme) {
+        // Native app: redirect back to the app with session token via deep link
+        const userBase64 = Buffer.from(JSON.stringify(buildUserResponse(user))).toString("base64");
+        const deepLink = `${appScheme}://oauth/callback?sessionToken=${encodeURIComponent(sessionToken)}&user=${encodeURIComponent(userBase64)}`;
+        console.log("[OAuth] Native callback, redirecting to deep link:", deepLink);
+        res.redirect(302, deepLink);
+      } else {
+        // Web: redirect to the frontend URL
+        const frontendUrl =
+          process.env.EXPO_WEB_PREVIEW_URL ||
+          process.env.EXPO_PACKAGER_PROXY_URL ||
+          "http://localhost:8081";
+        console.log("[OAuth] Web callback, redirecting to frontend:", frontendUrl);
+        res.redirect(302, frontendUrl);
+      }
     } catch (error) {
       console.error("[OAuth] Callback failed", error);
       res.status(500).json({ error: "OAuth callback failed" });
@@ -111,7 +148,7 @@ export function registerOAuthRoutes(app: Express) {
       const user = await syncUser(userInfo);
 
       const sessionToken = await sdk.createSessionToken(userInfo.openId!, {
-        name: userInfo.name || "",
+        name: userInfo.name || "user",
         expiresInMs: ONE_YEAR_MS,
       });
 
@@ -146,14 +183,10 @@ export function registerOAuthRoutes(app: Express) {
   });
 
   // Establish session cookie from Bearer token
-  // Used by iframe preview: frontend receives token via postMessage, then calls this endpoint
-  // to get a proper Set-Cookie response from the backend (3000-xxx domain)
   app.post("/api/auth/session", async (req: Request, res: Response) => {
     try {
-      // Authenticate using Bearer token from Authorization header
       const user = await sdk.authenticateRequest(req);
 
-      // Get the token from the Authorization header to set as cookie
       const authHeader = req.headers.authorization || req.headers.Authorization;
       if (typeof authHeader !== "string" || !authHeader.startsWith("Bearer ")) {
         res.status(400).json({ error: "Bearer token required" });
@@ -161,7 +194,6 @@ export function registerOAuthRoutes(app: Express) {
       }
       const token = authHeader.slice("Bearer ".length).trim();
 
-      // Set cookie for this domain (3000-xxx)
       const cookieOptions = getSessionCookieOptions(req);
       res.cookie(COOKIE_NAME, token, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 

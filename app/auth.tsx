@@ -5,13 +5,14 @@ import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import { startOAuthLogin } from "@/constants/oauth";
 import { useAuth } from "@/hooks/use-auth";
+import * as Auth from "@/lib/_core/auth";
 import * as Haptics from "expo-haptics";
 import { useEffect, useState } from "react";
 
 export default function AuthScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { isAuthenticated, loading } = useAuth();
+  const { isAuthenticated, loading, refresh } = useAuth();
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
@@ -24,7 +25,56 @@ export default function AuthScreen() {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setIsLoggingIn(true);
     try {
-      await startOAuthLogin();
+      const result = await startOAuthLogin();
+      console.log("[Auth] Login result:", result);
+
+      // On native, if WebBrowser.openAuthSessionAsync returned a URL,
+      // the deep link handler in oauth/callback.tsx will process it.
+      // But we should also handle the case where the URL contains
+      // sessionToken directly (from server redirect).
+      if (result && Platform.OS !== "web") {
+        try {
+          const url = new URL(result);
+          const sessionToken = url.searchParams.get("sessionToken");
+          const userParam = url.searchParams.get("user");
+
+          if (sessionToken) {
+            console.log("[Auth] Got session token from auth result");
+            await Auth.setSessionToken(sessionToken);
+
+            if (userParam) {
+              try {
+                const userJson = atob(userParam);
+                const userData = JSON.parse(userJson);
+                const userInfo: Auth.User = {
+                  id: userData.id,
+                  openId: userData.openId,
+                  name: userData.name,
+                  email: userData.email,
+                  loginMethod: userData.loginMethod,
+                  lastSignedIn: new Date(userData.lastSignedIn || Date.now()),
+                };
+                await Auth.setUserInfo(userInfo);
+              } catch (e) {
+                console.error("[Auth] Failed to parse user data:", e);
+              }
+            }
+
+            // Refresh auth state and navigate
+            await refresh();
+            router.replace("/(tabs)" as any);
+            return;
+          }
+        } catch (e) {
+          console.log("[Auth] Could not parse result URL:", e);
+        }
+      }
+
+      // On web, the page will redirect, so we don't need to do anything here.
+      // On native, if we didn't get a token, the user may have cancelled.
+      if (Platform.OS !== "web") {
+        setIsLoggingIn(false);
+      }
     } catch (e) {
       console.error("Login failed:", e);
       setIsLoggingIn(false);

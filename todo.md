@@ -53,3 +53,12 @@
 - [x] Subscription editing form validation
 - [x] Amount and date validation
 - [x] Error handling and user feedback
+
+## Bug Fixes (Phase 4)
+
+- [x] Fix connections/sign-in not working
+- [x] Fix EXPO_PUBLIC_APP_ID not set for Metro bundler
+- [x] Fix cookie domain extraction for multi-segment domains (us2.manus.computer)
+- [x] Fix session token name field empty causing verification failure
+- [x] Use WebBrowser.openAuthSessionAsync for native OAuth flow
+- [x] Add native deep link redirect from server OAuth callback

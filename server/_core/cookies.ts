@@ -21,8 +21,14 @@ function isSecureRequest(req: Request) {
 
 /**
  * Extract parent domain for cookie sharing across subdomains.
- * e.g., "3000-xxx.manuspre.computer" -> ".manuspre.computer"
- * This allows cookies set by 3000-xxx to be read by 8081-xxx
+ * 
+ * Handles multi-segment domains properly:
+ * - "3000-xxx.us2.manus.computer" -> ".us2.manus.computer"
+ * - "3000-xxx.manuspre.computer" -> ".manuspre.computer"
+ * 
+ * The first segment (e.g., "3000-xxx") is the port-specific subdomain.
+ * Everything after it is the parent domain that should be shared.
+ * This allows cookies set by 3000-xxx to be read by 8081-xxx.
  */
 function getParentDomain(hostname: string): string | undefined {
   // Don't set domain for localhost or IP addresses
@@ -33,15 +39,15 @@ function getParentDomain(hostname: string): string | undefined {
   // Split hostname into parts
   const parts = hostname.split(".");
 
-  // Need at least 3 parts for a subdomain (e.g., "3000-xxx.manuspre.computer")
-  // For "manuspre.computer", we can't set a parent domain
+  // Need at least 3 parts for a subdomain
   if (parts.length < 3) {
     return undefined;
   }
 
-  // Return parent domain with leading dot (e.g., ".manuspre.computer")
-  // This allows cookie to be shared across all subdomains
-  return "." + parts.slice(-2).join(".");
+  // The first segment is the port-specific subdomain (e.g., "3000-xxx")
+  // Return everything after it as the parent domain
+  // e.g., "3000-xxx.us2.manus.computer" -> ".us2.manus.computer"
+  return "." + parts.slice(1).join(".");
 }
 
 export function getSessionCookieOptions(

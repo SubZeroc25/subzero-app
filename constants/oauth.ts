@@ -1,8 +1,8 @@
 import * as Linking from "expo-linking";
+import * as WebBrowser from "expo-web-browser";
 import * as ReactNative from "react-native";
 
 // Extract scheme from bundle ID (last segment timestamp, prefixed with "manus")
-// e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
 const bundleId = "space.manus.subzero.t20260327130423";
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
@@ -30,22 +30,18 @@ export const API_BASE_URL = env.apiBaseUrl;
  * URL pattern: https://PORT-sandboxid.region.domain
  */
 export function getApiBaseUrl(): string {
-  // If API_BASE_URL is set, use it
   if (API_BASE_URL) {
     return API_BASE_URL.replace(/\/$/, "");
   }
 
-  // On web, derive from current hostname by replacing port 8081 with 3000
   if (ReactNative.Platform.OS === "web" && typeof window !== "undefined" && window.location) {
     const { protocol, hostname } = window.location;
-    // Pattern: 8081-sandboxid.region.domain -> 3000-sandboxid.region.domain
     const apiHostname = hostname.replace(/^8081-/, "3000-");
     if (apiHostname !== hostname) {
       return `${protocol}//${apiHostname}`;
     }
   }
 
-  // Fallback to empty (will use relative URL)
   return "";
 }
 
@@ -65,17 +61,20 @@ const encodeState = (value: string) => {
 
 /**
  * Get the redirect URI for OAuth callback.
- * - Web: uses API server callback endpoint
- * - Native: uses deep link scheme
+ * - Web: uses API server callback endpoint (cookie-based auth)
+ * - Native: uses API server callback endpoint too (server handles redirect back to app)
  */
 export const getRedirectUri = () => {
-  if (ReactNative.Platform.OS === "web") {
-    return `${getApiBaseUrl()}/api/oauth/callback`;
-  } else {
-    // Always use manus* scheme, not exp://
-    // Format: manus{timestamp}://oauth/callback
-    return `${env.deepLinkScheme}://oauth/callback`;
+  const apiBase = getApiBaseUrl();
+  if (apiBase) {
+    // Both web and native use the server callback endpoint
+    return `${apiBase}/api/oauth/callback`;
   }
+  // Fallback for web when API base isn't set
+  if (ReactNative.Platform.OS === "web" && typeof window !== "undefined") {
+    return `${window.location.origin}/api/oauth/callback`;
+  }
+  return `${env.deepLinkScheme}://oauth/callback`;
 };
 
 export const getLoginUrl = () => {
@@ -94,38 +93,55 @@ export const getLoginUrl = () => {
 /**
  * Start OAuth login flow.
  *
- * On native platforms (iOS/Android), open the system browser directly so
- * the OAuth callback returns via deep link to the app.
+ * On native: Uses WebBrowser.openAuthSessionAsync which handles the
+ * redirect back to the app properly in both Expo Go and standalone builds.
+ * The server callback at /api/oauth/callback will redirect back to the app
+ * with a deep link containing the session token.
  *
- * On web, this simply redirects to the login URL.
- *
- * @returns Always null, the callback is handled via deep link.
+ * On web: Redirects the current window to the login URL.
+ * The server callback sets a cookie and redirects back to the frontend.
  */
 export async function startOAuthLogin(): Promise<string | null> {
   const loginUrl = getLoginUrl();
+  console.log("[OAuth] Starting login flow...");
+  console.log("[OAuth] Login URL:", loginUrl);
+  console.log("[OAuth] Redirect URI:", getRedirectUri());
 
   if (ReactNative.Platform.OS === "web") {
-    // On web, just redirect
+    // On web, redirect the current window
     if (typeof window !== "undefined") {
       window.location.href = loginUrl;
     }
     return null;
   }
 
-  const supported = await Linking.canOpenURL(loginUrl);
-  if (!supported) {
-    console.warn("[OAuth] Cannot open login URL: URL scheme not supported");
-    // 可考虑抛出错误或返回错误状态，让调用方处理
+  // On native, use WebBrowser.openAuthSessionAsync
+  // This opens an in-app browser that can handle the redirect back
+  try {
+    // The redirect URL should use the app's deep link scheme
+    // so the browser can redirect back to the app
+    const appRedirectUrl = `${env.deepLinkScheme}://oauth/callback`;
+    console.log("[OAuth] Opening auth session with app redirect:", appRedirectUrl);
+
+    const result = await WebBrowser.openAuthSessionAsync(loginUrl, appRedirectUrl);
+    console.log("[OAuth] Auth session result:", JSON.stringify(result));
+
+    if (result.type === "success" && result.url) {
+      console.log("[OAuth] Auth session succeeded with URL:", result.url);
+      // The URL will be handled by the deep link handler / expo-router
+      return result.url;
+    } else {
+      console.log("[OAuth] Auth session was cancelled or dismissed");
+      return null;
+    }
+  } catch (error) {
+    console.error("[OAuth] Failed to open auth session:", error);
+    // Fallback: try opening URL directly
+    try {
+      await Linking.openURL(loginUrl);
+    } catch (linkError) {
+      console.error("[OAuth] Fallback Linking.openURL also failed:", linkError);
+    }
     return null;
   }
-
-  try {
-    await Linking.openURL(loginUrl);
-  } catch (error) {
-    console.error("[OAuth] Failed to open login URL:", error);
-    // 可考虑抛出错误让调用方处理
-  }
-
-  // The OAuth callback will reopen the app via deep link.
-  return null;
 }
