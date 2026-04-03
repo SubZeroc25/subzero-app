@@ -217,3 +217,8 @@
 - [x] Add static file serving to production server for web export
 - [x] Update build script to include expo web export alongside server build
 - [x] Verify dist/web contains all static HTML pages and assets
+
+## Phase 17: Deployment Fixes
+
+- [x] Fix backend deployment: Metro crashes in Docker during expo web export - revert to server-only build
+- [x] Fix APK build: set minSdkVersion to 24 for react-native-worklets compatibility (already set)
