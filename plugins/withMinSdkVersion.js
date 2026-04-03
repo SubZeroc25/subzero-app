@@ -7,9 +7,9 @@
  * "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
  *
  * The plugin:
- * 1. Modifies android/build.gradle to explicitly set rootProject.ext.minSdkVersion = 24
- * 2. Ensures gradle.properties has the correct android.minSdkVersion=24
- * 3. Adds a clean task for stale .cxx directories
+ * 1. Ensures gradle.properties has android.minSdkVersion=24
+ * 2. Sets rootProject.ext.minSdkVersion = 24 directly in root build.gradle
+ * 3. Adds a clean task for stale .cxx directories in app/build.gradle
  */
 const {
   withGradleProperties,
@@ -44,38 +44,29 @@ function withMinSdkGradleProperties(config) {
 }
 
 /**
- * Modifies the root build.gradle to explicitly set minSdkVersion in ext block
- * This ensures that even if the version catalog or gradle.properties are not
- * correctly read, the minSdkVersion is still set correctly.
+ * Modifies the root build.gradle to explicitly set rootProject.ext.minSdkVersion
+ * at the top level so it runs during project configuration phase,
+ * before any subproject evaluation occurs.
+ *
+ * This ensures that all subprojects using `safeExtGet("minSdkVersion", ...)` 
+ * pick up the correct value of 24 instead of their fallback defaults.
  */
 function withMinSdkRootBuildGradle(config) {
   return withProjectBuildGradle(config, (config) => {
     let contents = config.modResults.contents;
 
-    // Add an afterEvaluate block that forces minSdkVersion on rootProject.ext
+    // Insert rootProject.ext.minSdkVersion = 24 at the top of build.gradle
+    // This runs during project configuration phase (before evaluation completes)
     const forceMinSdkBlock = `
 // Force minSdkVersion to ${MIN_SDK_VERSION} to prevent stale NDK cache issues
 // This fixes: "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
-allprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                if (it.hasProperty('defaultConfig')) {
-                    it.defaultConfig {
-                        if (minSdkVersion.apiLevel < ${MIN_SDK_VERSION}) {
-                            minSdkVersion ${MIN_SDK_VERSION}
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+rootProject.ext.set("minSdkVersion", ${MIN_SDK_VERSION})
 `;
 
     // Only add if not already present
     if (!contents.includes("Force minSdkVersion to")) {
-      contents += forceMinSdkBlock;
+      // Prepend to the top of the file so it runs before any plugin evaluation
+      contents = forceMinSdkBlock + contents;
     }
 
     config.modResults.contents = contents;

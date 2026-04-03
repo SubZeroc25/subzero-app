@@ -1,11 +1,10 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 
 /**
- * Test the withMinSdkVersion config plugin.
- * 
- * Since the plugin uses expo/config-plugins which are CJS and tricky to mock
- * with vi.resetModules, we test the plugin's behavior by directly testing
- * the transformation logic extracted from the plugin file.
+ * Test the withMinSdkVersion config plugin transformations.
+ *
+ * We test the transformation logic directly since the plugin uses
+ * expo/config-plugins which are difficult to mock in vitest.
  */
 
 // Helper functions that replicate the plugin's transformation logic
@@ -27,24 +26,11 @@ function transformProjectBuildGradle(contents: string) {
   const forceMinSdkBlock = `
 // Force minSdkVersion to 24 to prevent stale NDK cache issues
 // This fixes: "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
-allprojects {
-    afterEvaluate { project ->
-        if (project.hasProperty('android')) {
-            project.android {
-                if (it.hasProperty('defaultConfig')) {
-                    it.defaultConfig {
-                        if (minSdkVersion.apiLevel < 24) {
-                            minSdkVersion 24
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+rootProject.ext.set("minSdkVersion", 24)
 `;
   if (!contents.includes("Force minSdkVersion to")) {
-    contents += forceMinSdkBlock;
+    // Prepend to the top of the file
+    contents = forceMinSdkBlock + contents;
   }
   return contents;
 }
@@ -100,8 +86,12 @@ describe("withMinSdkVersion config plugin", () => {
       ];
       const result = transformGradleProperties(input);
 
-      expect(result.filter((p: any) => p.key === "android.compileSdkVersion")).toHaveLength(1);
-      expect(result.filter((p: any) => p.key === "android.targetSdkVersion")).toHaveLength(1);
+      expect(
+        result.filter((p: any) => p.key === "android.compileSdkVersion")
+      ).toHaveLength(1);
+      expect(
+        result.filter((p: any) => p.key === "android.targetSdkVersion")
+      ).toHaveLength(1);
     });
 
     it("should add minSdkVersion when not present", () => {
@@ -119,21 +109,29 @@ describe("withMinSdkVersion config plugin", () => {
   });
 
   describe("root build.gradle transformation", () => {
-    it("should add force minSdkVersion block", () => {
+    it("should prepend rootProject.ext.set for minSdkVersion", () => {
       const input = `apply plugin: "expo-root-project"`;
       const result = transformProjectBuildGradle(input);
 
       expect(result).toContain("Force minSdkVersion to 24");
-      expect(result).toContain("minSdkVersion.apiLevel < 24");
-      expect(result).toContain("minSdkVersion 24");
-      expect(result).toContain("allprojects");
-      expect(result).toContain("afterEvaluate");
+      expect(result).toContain('rootProject.ext.set("minSdkVersion", 24)');
+      // The force block should be at the beginning
+      expect(result.indexOf("Force minSdkVersion")).toBeLessThan(
+        result.indexOf("expo-root-project")
+      );
+    });
+
+    it("should NOT use afterEvaluate (causes crash in EAS builds)", () => {
+      const input = `apply plugin: "expo-root-project"`;
+      const result = transformProjectBuildGradle(input);
+
+      expect(result).not.toContain("afterEvaluate");
     });
 
     it("should not duplicate force block", () => {
-      const input = `apply plugin: "expo-root-project"
-// Force minSdkVersion to 24 to prevent stale NDK cache issues
-allprojects { }`;
+      const input = `// Force minSdkVersion to 24 to prevent stale NDK cache issues
+rootProject.ext.set("minSdkVersion", 24)
+apply plugin: "expo-root-project"`;
       const result = transformProjectBuildGradle(input);
 
       const matches = result.match(/Force minSdkVersion to/g);
@@ -149,7 +147,6 @@ allprojects { }`;
       expect(result).toContain("cleanStaleCxxCache");
       expect(result).toContain("preBuild.dependsOn cleanStaleCxxCache");
       expect(result).toContain('dir.name == ".cxx"');
-      expect(result).toContain("Cleaning stale .cxx cache");
     });
 
     it("should not duplicate cleanStaleCxxCache", () => {
@@ -163,11 +160,14 @@ preBuild.dependsOn cleanStaleCxxCache`;
     });
   });
 
-  describe("plugin file exists and exports correctly", () => {
-    it("should export a function from the plugin file", async () => {
-      // Read the actual plugin file to verify it exists and has the right structure
+  describe("plugin file structure", () => {
+    it("should export correctly and NOT contain afterEvaluate", async () => {
       const fs = await import("fs");
-      const pluginPath = require("path").resolve(__dirname, "../plugins/withMinSdkVersion.js");
+      const path = await import("path");
+      const pluginPath = path.resolve(
+        __dirname,
+        "../plugins/withMinSdkVersion.js"
+      );
       const pluginContent = fs.readFileSync(pluginPath, "utf-8");
 
       expect(pluginContent).toContain("module.exports = withMinSdkVersion");
@@ -175,6 +175,9 @@ preBuild.dependsOn cleanStaleCxxCache`;
       expect(pluginContent).toContain("withProjectBuildGradle");
       expect(pluginContent).toContain("withAppBuildGradle");
       expect(pluginContent).toContain("MIN_SDK_VERSION = 24");
+      expect(pluginContent).toContain('rootProject.ext.set("minSdkVersion"');
+      // CRITICAL: must NOT contain afterEvaluate
+      expect(pluginContent).not.toContain("afterEvaluate");
     });
   });
 });

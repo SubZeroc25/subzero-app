@@ -227,5 +227,9 @@
 
 - [x] Force minSdkVersion 24 via custom config plugin (withMinSdkVersion.js) that:
   - Forces gradle.properties android.minSdkVersion=24
-  - Adds afterEvaluate block to root build.gradle enforcing minSdkVersion >= 24 on all subprojects
+  - Prepends rootProject.ext.set("minSdkVersion", 24) to root build.gradle
   - Adds cleanStaleCxxCache pre-build task to clear stale NDK .cxx directories
+
+## Phase 19: Fix afterEvaluate Crash in APK Build
+
+- [x] Fix withMinSdkVersion plugin: replaced afterEvaluate block (which crashes in EAS builds) with rootProject.ext.set() prepended to top of build.gradle
