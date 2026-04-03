@@ -83,7 +83,7 @@ SubZero is a subscription tracking and management app. Users sign in, connect th
 - Comparison table: Free vs Pro
 - Free: 1 email scan/month, up to 10 subscriptions, basic analytics
 - Pro: Unlimited scans, unlimited subscriptions, full analytics, export, manual add, priority support
-- Price: $4.99/month or $39.99/year
+- Price: $9.99/month or $39.99/year
 - CTA: "Upgrade to Pro" (Stripe not live — shows "Coming Soon" toast)
 - Restore purchases link
 

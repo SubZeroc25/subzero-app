@@ -131,7 +131,7 @@
 
 ## Phase 9: Pricing Update
 
-- [x] Update Pro price from $4.99 to $9.99/month across all screens
+- [x] Update Pro price from $9.99 to $9.99/month across all screens
 
 ## Phase 10: Aggressive Cancellation Email Feature
 
