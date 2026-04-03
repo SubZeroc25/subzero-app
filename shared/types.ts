@@ -60,8 +60,6 @@ export interface UserProfileData {
   userId: number;
   plan: PlanTier;
   onboardingComplete: boolean;
-  connectedGmail: boolean;
-  connectedOutlook: boolean;
   currency: string;
   notificationsEnabled: boolean;
   scansThisMonth: number;

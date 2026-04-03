@@ -1,360 +1,304 @@
-import { Text, View, Pressable, Platform, ActivityIndicator } from "react-native";
-import { ScreenContainer } from "@/components/screen-container";
+import { useState } from "react";
+import { Text, View, TouchableOpacity, ActivityIndicator, Alert, Platform, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
+import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
+import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
-import { useAuth } from "@/hooks/use-auth";
+import { useAppContext } from "@/lib/app-context";
 import { trpc } from "@/lib/trpc";
-import * as Haptics from "expo-haptics";
-import { useState, useEffect, useCallback } from "react";
 
-type ScanStep = "choose" | "connecting" | "scanning" | "analyzing" | "completed" | "failed";
-
-const PRIVACY_MESSAGES = [
-  "We only read billing-related emails",
-  "Your emails are never stored on our servers",
-  "Only subscription data is extracted",
-  "All data is encrypted in transit",
-  "You can disconnect anytime from Profile",
-];
+type ScanStep = "choose" | "uploading" | "completed" | "failed";
 
 export default function ScanScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { isAuthenticated } = useAuth();
+  const { state, refreshProfile } = useAppContext();
   const [step, setStep] = useState<ScanStep>("choose");
-  const [provider, setProvider] = useState<"gmail" | "outlook">("gmail");
-  const [jobId, setJobId] = useState<number | null>(null);
-  const [emailsScanned, setEmailsScanned] = useState(0);
-  const [subsFound, setSubsFound] = useState(0);
-  const [privacyIdx, setPrivacyIdx] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<{
+    subscriptionsFound: number;
+    subscriptions: Array<{ name: string; provider: string; amount: number; billingCycle: string }>;
+    message: string;
+  } | null>(null);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const scanStart = trpc.scan.start.useMutation();
-  const scanStatus = trpc.scan.status.useQuery(
-    { jobId: jobId! },
-    { enabled: !!jobId, refetchInterval: step !== "completed" && step !== "failed" ? 2000 : false }
-  );
+  const uploadMutation = trpc.scan.uploadAndExtract.useMutation();
 
-  // Rotate privacy messages
-  useEffect(() => {
-    if (step === "connecting" || step === "scanning" || step === "analyzing") {
-      const interval = setInterval(() => {
-        setPrivacyIdx((i) => (i + 1) % PRIVACY_MESSAGES.length);
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [step]);
+  const pickImage = async (source: "camera" | "library") => {
+    try {
+      let pickerResult: ImagePicker.ImagePickerResult;
 
-  // Watch scan status
-  useEffect(() => {
-    if (scanStatus.data) {
-      const job = scanStatus.data;
-      if (job.status === "completed") {
-        setStep("completed");
-        setEmailsScanned(job.emailsScanned);
-        setSubsFound(job.subscriptionsFound);
-        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else if (job.status === "failed") {
-        setStep("failed");
-        setError("Scan failed. Please try again.");
-        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      if (source === "camera") {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Needed", "Camera access is required to take photos of receipts.");
+          return;
+        }
+        pickerResult = await ImagePicker.launchCameraAsync({
+          mediaTypes: ["images"],
+          quality: 0.8,
+          base64: true,
+        });
       } else {
-        setStep(job.status as ScanStep);
-        setEmailsScanned(job.emailsScanned);
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== "granted") {
+          Alert.alert("Permission Needed", "Photo library access is required to select receipt images.");
+          return;
+        }
+        pickerResult = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ["images"],
+          quality: 0.8,
+          base64: true,
+        });
+      }
+
+      if (pickerResult.canceled || !pickerResult.assets?.[0]?.base64) {
+        return;
+      }
+
+      const asset = pickerResult.assets[0];
+      setStep("uploading");
+
+      if (Platform.OS !== "web") {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
+      if (!asset.base64) {
+        setStep("failed");
+        setErrorMessage("Failed to read image data. Please try again.");
+        return;
+      }
+
+      const response = await uploadMutation.mutateAsync({
+        imageBase64: asset.base64,
+        mimeType: asset.mimeType || "image/jpeg",
+      });
+
+      setResult({
+        subscriptionsFound: response.subscriptionsFound,
+        subscriptions: response.subscriptions,
+        message: response.message,
+      });
+      setStep("completed");
+
+      if (response.subscriptionsFound > 0 && Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+    } catch (error: any) {
+      console.error("[Scan] Error:", error);
+      setErrorMessage(error.message || "Failed to process image. Please try again.");
+      setStep("failed");
+      if (Platform.OS !== "web") {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       }
     }
-  }, [scanStatus.data]);
-
-  const handleStartScan = useCallback(async (selectedProvider: "gmail" | "outlook") => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setProvider(selectedProvider);
-    setStep("connecting");
-    setError(null);
-    try {
-      const result = await scanStart.mutateAsync({ provider: selectedProvider });
-      setJobId(result.jobId);
-    } catch (e: any) {
-      setStep("failed");
-      setError(e.message || "Failed to start scan");
-      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  }, []);
+  };
 
   const handleDone = () => {
-    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    refreshProfile();
     router.back();
   };
 
   const handleRetry = () => {
     setStep("choose");
-    setJobId(null);
-    setError(null);
-    setEmailsScanned(0);
-    setSubsFound(0);
+    setResult(null);
+    setErrorMessage("");
   };
 
-  const getStepProgress = () => {
-    switch (step) {
-      case "connecting": return 0.15;
-      case "scanning": return 0.5;
-      case "analyzing": return 0.8;
-      case "completed": return 1;
-      default: return 0;
-    }
-  };
+  return (
+    <ScreenContainer edges={["top", "bottom", "left", "right"]} className="p-6">
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        {/* Header */}
+        <View className="flex-row items-center mb-6">
+          <TouchableOpacity
+            onPress={() => router.back()}
+            style={{ padding: 8, marginRight: 8 }}
+          >
+            <IconSymbol name="xmark" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+          <Text className="text-xl font-bold text-foreground">Scan Receipt</Text>
+        </View>
 
-  const getStepLabel = () => {
-    switch (step) {
-      case "connecting": return "Connecting to email...";
-      case "scanning": return `Scanning inbox... ${emailsScanned > 0 ? `(${emailsScanned} emails)` : ""}`;
-      case "analyzing": return "Analyzing emails with AI...";
-      case "completed": return `Found ${subsFound} subscription${subsFound !== 1 ? "s" : ""}!`;
-      case "failed": return "Scan failed";
-      default: return "";
-    }
-  };
-
-  // Choose provider
-  if (step === "choose") {
-    return (
-      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-        <View className="flex-1 px-6">
-          {/* Header */}
-          <View className="flex-row items-center justify-between pt-4 mb-8">
-            <Pressable
-              onPress={() => router.back()}
-              style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
-            >
-              <IconSymbol name="xmark" size={24} color={colors.foreground} />
-            </Pressable>
-            <Text className="text-lg font-bold text-foreground">Scan Inbox</Text>
-            <View style={{ width: 32 }} />
-          </View>
-
-          <View className="flex-1 justify-center">
-            <View className="items-center mb-8">
-              <View className="w-20 h-20 rounded-2xl bg-primary/10 items-center justify-center mb-4">
-                <IconSymbol name="envelope.fill" size={40} color={colors.primary} />
+        {step === "choose" && (
+          <View className="flex-1 gap-6">
+            {/* Explanation */}
+            <View className="items-center gap-3 py-6">
+              <View className="w-20 h-20 rounded-full items-center justify-center" style={{ backgroundColor: colors.primary + "15" }}>
+                <IconSymbol name="doc.text.viewfinder" size={40} color={colors.primary} />
               </View>
-              <Text className="text-2xl font-bold text-foreground text-center mb-2">
-                Choose Email Provider
+              <Text className="text-xl font-bold text-foreground text-center">
+                Snap a Receipt or Screenshot
               </Text>
-              <Text className="text-sm text-muted text-center px-4">
-                We'll scan your inbox for subscription and billing emails
+              <Text className="text-sm text-muted text-center px-4 leading-relaxed">
+                Take a photo of a billing email, receipt, invoice, or subscription confirmation.
+                Our AI will automatically extract the subscription details.
               </Text>
             </View>
 
-            <View className="gap-3 mb-8">
-              <Pressable
-                onPress={() => handleStartScan("gmail")}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    paddingVertical: 16,
-                    paddingHorizontal: 20,
-                    borderRadius: 14,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 14,
-                    opacity: pressed ? 0.8 : 1,
-                    transform: [{ scale: pressed ? 0.98 : 1 }],
-                  },
-                ]}
+            {/* Action Buttons */}
+            <View className="gap-4">
+              <TouchableOpacity
+                onPress={() => pickImage("camera")}
+                className="bg-primary rounded-2xl p-5 flex-row items-center"
+                activeOpacity={0.8}
               >
-                <View className="w-12 h-12 rounded-xl bg-red-500/10 items-center justify-center">
-                  <IconSymbol name="envelope.fill" size={24} color="#EA4335" />
+                <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: "rgba(255,255,255,0.2)" }}>
+                  <IconSymbol name="camera.fill" size={24} color="#fff" />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-base font-semibold text-foreground">Gmail</Text>
-                  <Text className="text-xs text-muted">Scan Google email inbox</Text>
+                  <Text className="text-lg font-semibold" style={{ color: "#fff" }}>Take Photo</Text>
+                  <Text className="text-sm" style={{ color: "rgba(255,255,255,0.8)" }}>
+                    Snap a receipt or billing email
+                  </Text>
                 </View>
-                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-              </Pressable>
+                <IconSymbol name="chevron.right" size={20} color="rgba(255,255,255,0.6)" />
+              </TouchableOpacity>
 
-              <Pressable
-                onPress={() => handleStartScan("outlook")}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.surface,
-                    borderWidth: 1,
-                    borderColor: colors.border,
-                    paddingVertical: 16,
-                    paddingHorizontal: 20,
-                    borderRadius: 14,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 14,
-                    opacity: pressed ? 0.8 : 1,
-                    transform: [{ scale: pressed ? 0.98 : 1 }],
-                  },
-                ]}
+              <TouchableOpacity
+                onPress={() => pickImage("library")}
+                className="bg-surface rounded-2xl p-5 flex-row items-center border border-border"
+                activeOpacity={0.8}
               >
-                <View className="w-12 h-12 rounded-xl items-center justify-center" style={{ backgroundColor: "#0078D4" + "15" }}>
-                  <IconSymbol name="envelope.fill" size={24} color="#0078D4" />
+                <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: colors.primary + "15" }}>
+                  <IconSymbol name="photo.fill" size={24} color={colors.primary} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-base font-semibold text-foreground">Outlook</Text>
-                  <Text className="text-xs text-muted">Scan Microsoft email inbox</Text>
+                  <Text className="text-lg font-semibold text-foreground">Choose from Library</Text>
+                  <Text className="text-sm text-muted">
+                    Select a saved screenshot or receipt
+                  </Text>
                 </View>
-                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-              </Pressable>
+                <IconSymbol name="chevron.right" size={20} color={colors.muted} />
+              </TouchableOpacity>
             </View>
 
-            {/* Privacy */}
-            <View className="items-center">
-              <View className="flex-row items-center gap-2 bg-success/10 px-4 py-2.5 rounded-full">
-                <IconSymbol name="lock.fill" size={14} color={colors.success} />
-                <Text className="text-xs font-medium text-success">
-                  Your emails are never stored
+            {/* Tips */}
+            <View className="bg-surface rounded-2xl p-4 border border-border mt-2">
+              <Text className="text-sm font-semibold text-foreground mb-3">Tips for best results</Text>
+              <View className="gap-2">
+                {[
+                  "Screenshot billing emails showing amounts and dates",
+                  "Capture payment receipts from your email",
+                  "Photo subscription confirmation pages",
+                  "Make sure text is clear and readable",
+                ].map((tip, i) => (
+                  <View key={i} className="flex-row items-start gap-2">
+                    <Text className="text-sm" style={{ color: colors.success }}>✓</Text>
+                    <Text className="text-sm text-muted flex-1">{tip}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+
+            {!state.isProUser && (
+              <View className="bg-surface rounded-2xl p-4 border border-border">
+                <Text className="text-xs text-muted text-center">
+                  Free plan: 3 scans/month · Upgrade to Pro for unlimited
                 </Text>
               </View>
-            </View>
+            )}
           </View>
-        </View>
-      </ScreenContainer>
-    );
-  }
+        )}
 
-  // Progress / Result
-  return (
-    <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <View className="flex-1 px-6">
-        {/* Header */}
-        <View className="flex-row items-center justify-between pt-4 mb-8">
-          <View style={{ width: 32 }} />
-          <Text className="text-lg font-bold text-foreground">
-            {step === "completed" ? "Scan Complete" : step === "failed" ? "Scan Failed" : "Scanning..."}
-          </Text>
-          <View style={{ width: 32 }} />
-        </View>
-
-        <View className="flex-1 justify-center items-center">
-          {/* Icon */}
-          {step === "completed" ? (
-            <View className="w-24 h-24 rounded-full bg-success/10 items-center justify-center mb-6">
-              <IconSymbol name="checkmark" size={48} color={colors.success} />
-            </View>
-          ) : step === "failed" ? (
-            <View className="w-24 h-24 rounded-full bg-error/10 items-center justify-center mb-6">
-              <IconSymbol name="xmark" size={48} color={colors.error} />
-            </View>
-          ) : (
-            <View className="w-24 h-24 rounded-full bg-primary/10 items-center justify-center mb-6">
+        {step === "uploading" && (
+          <View className="flex-1 items-center justify-center gap-6">
+            <View className="w-24 h-24 rounded-full items-center justify-center" style={{ backgroundColor: colors.primary + "15" }}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
-          )}
-
-          {/* Status */}
-          <Text className="text-2xl font-bold text-foreground text-center mb-2">
-            {getStepLabel()}
-          </Text>
-
-          {/* Error message */}
-          {error && (
-            <Text className="text-sm text-error text-center mb-4 px-4">{error}</Text>
-          )}
-
-          {/* Progress bar */}
-          {step !== "failed" && step !== "completed" && (
-            <View className="w-full max-w-xs mt-4 mb-6">
-              <View className="h-2 bg-border rounded-full overflow-hidden">
-                <View
-                  className="h-full rounded-full bg-primary"
-                  style={{ width: `${getStepProgress() * 100}%` }}
-                />
-              </View>
-              <View className="flex-row justify-between mt-2">
-                <Text className="text-[10px] text-muted">Connect</Text>
-                <Text className="text-[10px] text-muted">Scan</Text>
-                <Text className="text-[10px] text-muted">Analyze</Text>
-                <Text className="text-[10px] text-muted">Done</Text>
-              </View>
+            <View className="items-center gap-2">
+              <Text className="text-xl font-bold text-foreground">Analyzing Image</Text>
+              <Text className="text-sm text-muted text-center px-8">
+                Our AI is reading your receipt and extracting subscription details...
+              </Text>
             </View>
-          )}
+          </View>
+        )}
 
-          {/* Stats (completed) */}
-          {step === "completed" && (
-            <View className="flex-row gap-4 mt-4 mb-6">
-              <View className="bg-surface rounded-xl p-4 border border-border items-center min-w-[100px]">
-                <Text className="text-2xl font-bold text-foreground">{emailsScanned}</Text>
-                <Text className="text-xs text-muted">Emails Scanned</Text>
+        {step === "completed" && result && (
+          <View className="flex-1 gap-6">
+            <View className="items-center gap-3 py-6">
+              <View className="w-20 h-20 rounded-full items-center justify-center" style={{ backgroundColor: colors.success + "15" }}>
+                <IconSymbol name="checkmark" size={40} color={colors.success} />
               </View>
-              <View className="bg-surface rounded-xl p-4 border border-border items-center min-w-[100px]">
-                <Text className="text-2xl font-bold text-primary">{subsFound}</Text>
-                <Text className="text-xs text-muted">Found</Text>
+              <Text className="text-xl font-bold text-foreground">Scan Complete</Text>
+              <Text className="text-sm text-muted text-center px-4">
+                {result.message}
+              </Text>
+            </View>
+
+            {result.subscriptions.length > 0 && (
+              <View className="gap-3">
+                <Text className="text-sm font-semibold text-foreground">Subscriptions Found</Text>
+                {result.subscriptions.map((sub, i) => (
+                  <View key={i} className="bg-surface rounded-xl p-4 border border-border flex-row items-center justify-between">
+                    <View className="flex-1">
+                      <Text className="text-base font-semibold text-foreground">{sub.name}</Text>
+                      <Text className="text-sm text-muted">{sub.provider}</Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-base font-bold text-foreground">
+                        ${sub.amount.toFixed(2)}
+                      </Text>
+                      <Text className="text-xs text-muted">/{sub.billingCycle}</Text>
+                    </View>
+                  </View>
+                ))}
               </View>
-            </View>
-          )}
+            )}
 
-          {/* Privacy message (during scan) */}
-          {step !== "completed" && step !== "failed" && (
-            <View className="flex-row items-center gap-2 mt-6 bg-surface px-4 py-3 rounded-xl border border-border">
-              <IconSymbol name="shield.fill" size={14} color={colors.success} />
-              <Text className="text-xs text-muted flex-1">{PRIVACY_MESSAGES[privacyIdx]}</Text>
-            </View>
-          )}
-        </View>
+            <View className="gap-3 mt-4">
+              <TouchableOpacity
+                onPress={() => pickImage("library")}
+                className="bg-surface rounded-xl p-4 items-center border border-border"
+                activeOpacity={0.8}
+              >
+                <Text className="text-base font-semibold" style={{ color: colors.primary }}>
+                  Scan Another Receipt
+                </Text>
+              </TouchableOpacity>
 
-        {/* Actions */}
-        <View className="pb-8 gap-3">
-          {step === "completed" && (
-            <Pressable
-              onPress={handleDone}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: colors.primary,
-                  paddingVertical: 16,
-                  borderRadius: 14,
-                  alignItems: "center",
-                  opacity: pressed ? 0.9 : 1,
-                  transform: [{ scale: pressed ? 0.98 : 1 }],
-                },
-              ]}
-            >
-              <Text className="text-white text-base font-semibold">View Subscriptions</Text>
-            </Pressable>
-          )}
-          {step === "failed" && (
-            <>
-              <Pressable
+              <TouchableOpacity
+                onPress={handleDone}
+                className="bg-primary rounded-xl p-4 items-center"
+                activeOpacity={0.8}
+              >
+                <Text className="text-base font-semibold" style={{ color: "#fff" }}>Done</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {step === "failed" && (
+          <View className="flex-1 items-center justify-center gap-6">
+            <View className="w-20 h-20 rounded-full items-center justify-center" style={{ backgroundColor: colors.error + "15" }}>
+              <IconSymbol name="xmark" size={40} color={colors.error} />
+            </View>
+            <View className="items-center gap-2">
+              <Text className="text-xl font-bold text-foreground">Scan Failed</Text>
+              <Text className="text-sm text-muted text-center px-8">
+                {errorMessage}
+              </Text>
+            </View>
+            <View className="gap-3 w-full px-4">
+              <TouchableOpacity
                 onPress={handleRetry}
-                style={({ pressed }) => [
-                  {
-                    backgroundColor: colors.primary,
-                    paddingVertical: 16,
-                    borderRadius: 14,
-                    alignItems: "center",
-                    opacity: pressed ? 0.9 : 1,
-                  },
-                ]}
+                className="bg-primary rounded-xl p-4 items-center"
+                activeOpacity={0.8}
               >
-                <Text className="text-white text-base font-semibold">Try Again</Text>
-              </Pressable>
-              <Pressable
+                <Text className="text-base font-semibold" style={{ color: "#fff" }}>Try Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={() => router.back()}
-                style={({ pressed }) => [
-                  { paddingVertical: 14, alignItems: "center", opacity: pressed ? 0.6 : 1 },
-                ]}
+                className="bg-surface rounded-xl p-4 items-center border border-border"
+                activeOpacity={0.8}
               >
-                <Text className="text-muted text-sm font-medium">Cancel</Text>
-              </Pressable>
-            </>
-          )}
-          {step !== "completed" && step !== "failed" && (
-            <Pressable
-              onPress={() => router.back()}
-              style={({ pressed }) => [
-                { paddingVertical: 14, alignItems: "center", opacity: pressed ? 0.6 : 1 },
-              ]}
-            >
-              <Text className="text-muted text-sm font-medium">Cancel</Text>
-            </Pressable>
-          )}
-        </View>
-      </View>
+                <Text className="text-base font-semibold text-foreground">Go Back</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </ScrollView>
     </ScreenContainer>
   );
 }

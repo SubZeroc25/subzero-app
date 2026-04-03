@@ -1,13 +1,12 @@
 /**
  * Subscription Cancellation Service
- * Generates aggressive cancellation emails using AI and sends them
- * to subscription providers on behalf of the user via Gmail or Outlook API.
+ * Generates aggressive cancellation emails using AI.
+ * Users send emails via their native mail app (expo-mail-composer) — no OAuth needed.
  */
 
 import { invokeLLM } from "./_core/llm";
 
 // ── Known Provider Cancellation Contacts ─────────────────
-// Maps common subscription provider names to their support/cancellation email addresses
 const PROVIDER_CONTACTS: Record<string, { email: string; name: string }> = {
   // Streaming & Entertainment
   netflix: { email: "info@account.netflix.com", name: "Netflix" },
@@ -136,12 +135,9 @@ export function getProviderContact(
   const nameKey = subscriptionName.toLowerCase().trim();
   const providerKey = providerName.toLowerCase().trim();
 
-  // Try exact match on subscription name first
   if (PROVIDER_CONTACTS[nameKey]) return PROVIDER_CONTACTS[nameKey];
-  // Then try provider name
   if (PROVIDER_CONTACTS[providerKey]) return PROVIDER_CONTACTS[providerKey];
 
-  // Try partial match
   for (const [key, contact] of Object.entries(PROVIDER_CONTACTS)) {
     if (nameKey.includes(key) || key.includes(nameKey)) return contact;
     if (providerKey.includes(key) || key.includes(providerKey)) return contact;
@@ -224,7 +220,6 @@ Generate a JSON response with "subject" and "body" fields. The subject should be
     return { subject: parsed.subject, body: parsed.body };
   } catch (error) {
     console.error("[Cancellation] AI email generation failed:", error);
-    // Fallback template
     const subject = isFollowUp
       ? `URGENT: IMMEDIATE CANCELLATION DEMANDED - ${subscriptionName} (Follow-up #${followUpCount})`
       : `CANCELLATION REQUEST - ${subscriptionName} Subscription`;
@@ -232,7 +227,7 @@ Generate a JSON response with "subject" and "body" fields. The subject should be
     const body = isFollowUp
       ? `Dear ${providerName} Billing Department,
 
-This is follow-up #${followUpCount} regarding my cancellation request for ${subscriptionName}. Your failure to respond to my previous cancellation request(s) is unacceptable and potentially violates FTC regulations regarding consumer cancellation rights.
+This is follow-up #${followUpCount} regarding my cancellation request for ${subscriptionName}.
 
 I am demanding the IMMEDIATE cancellation of my ${subscriptionName} subscription ($${amount.toFixed(2)}/${billingCycle}).
 
@@ -273,97 +268,5 @@ Sincerely,
 ${userName}`;
 
     return { subject, body };
-  }
-}
-
-/**
- * Send a cancellation email via Gmail API
- */
-export async function sendCancellationViaGmail(
-  accessToken: string,
-  fromEmail: string,
-  toEmail: string,
-  subject: string,
-  body: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  try {
-    // Build RFC 2822 email message
-    const emailLines = [
-      `From: ${fromEmail}`,
-      `To: ${toEmail}`,
-      `Subject: ${subject}`,
-      `Content-Type: text/plain; charset=utf-8`,
-      `MIME-Version: 1.0`,
-      "",
-      body,
-    ];
-    const rawEmail = emailLines.join("\r\n");
-
-    // Base64url encode the email
-    const encodedEmail = Buffer.from(rawEmail)
-      .toString("base64")
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-
-    const response = await fetch("https://gmail.googleapis.com/gmail/v1/users/me/messages/send", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ raw: encodedEmail }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("[Cancellation] Gmail send failed:", error);
-      return { success: false, error: `Gmail API error: ${response.status}` };
-    }
-
-    const data = await response.json();
-    return { success: true, messageId: data.id };
-  } catch (error: any) {
-    console.error("[Cancellation] Gmail send error:", error);
-    return { success: false, error: error.message };
-  }
-}
-
-/**
- * Send a cancellation email via Outlook/Microsoft Graph API
- */
-export async function sendCancellationViaOutlook(
-  accessToken: string,
-  toEmail: string,
-  subject: string,
-  body: string
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  try {
-    const response = await fetch("https://graph.microsoft.com/v1.0/me/sendMail", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message: {
-          subject,
-          body: { contentType: "Text", content: body },
-          toRecipients: [{ emailAddress: { address: toEmail } }],
-        },
-        saveToSentItems: true,
-      }),
-    });
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error("[Cancellation] Outlook send failed:", error);
-      return { success: false, error: `Outlook API error: ${response.status}` };
-    }
-
-    return { success: true };
-  } catch (error: any) {
-    console.error("[Cancellation] Outlook send error:", error);
-    return { success: false, error: error.message };
   }
 }

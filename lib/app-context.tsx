@@ -6,30 +6,22 @@ import { trpc } from "@/lib/trpc";
 interface AppState {
   onboardingComplete: boolean;
   isProUser: boolean;
-  connectedGmail: boolean;
-  connectedOutlook: boolean;
 }
 
 interface AppContextType {
   state: AppState;
   setOnboardingComplete: (v: boolean) => void;
-  setConnectedGmail: (v: boolean) => void;
-  setConnectedOutlook: (v: boolean) => void;
   refreshProfile: () => void;
 }
 
 const defaultState: AppState = {
   onboardingComplete: false,
   isProUser: false,
-  connectedGmail: false,
-  connectedOutlook: false,
 };
 
 const AppContext = createContext<AppContextType>({
   state: defaultState,
   setOnboardingComplete: () => {},
-  setConnectedGmail: () => {},
-  setConnectedOutlook: () => {},
   refreshProfile: () => {},
 });
 
@@ -49,8 +41,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setState({
         onboardingComplete: profileQuery.data.onboardingComplete,
         isProUser: profileQuery.data.plan === "pro",
-        connectedGmail: profileQuery.data.connectedGmail,
-        connectedOutlook: profileQuery.data.connectedOutlook,
       });
     }
   }, [profileQuery.data]);
@@ -76,14 +66,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, onboardingComplete: v }));
   }, []);
 
-  const setConnectedGmail = useCallback((v: boolean) => {
-    setState((prev) => ({ ...prev, connectedGmail: v }));
-  }, []);
-
-  const setConnectedOutlook = useCallback((v: boolean) => {
-    setState((prev) => ({ ...prev, connectedOutlook: v }));
-  }, []);
-
   // Use ref-based approach to avoid unstable callback reference
   const profileQueryRef = useRef(profileQuery);
   profileQueryRef.current = profileQuery;
@@ -94,7 +76,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AppContext.Provider
-      value={{ state, setOnboardingComplete, setConnectedGmail, setConnectedOutlook, refreshProfile }}
+      value={{ state, setOnboardingComplete, refreshProfile }}
     >
       {children}
     </AppContext.Provider>

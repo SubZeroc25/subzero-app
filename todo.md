@@ -173,3 +173,30 @@
 
 ### Test Results
 - [x] All 58 tests passing, 0 TypeScript errors
+
+## Phase 12: Gmail OAuth Fix
+
+- [ ] Fix Gmail OAuth 401 invalid_client error when connecting Gmail
+
+## Phase 13: Remove OAuth Dependency — Zero-Config for All Users
+
+### Remove Gmail/Outlook OAuth
+- [x] Remove Gmail/Outlook OAuth credential requirements (GMAIL_CLIENT_ID, etc.)
+- [x] Remove email provider OAuth routes from server
+- [x] Remove email connection UI from Profile screen
+- [x] Remove email connection step from Onboarding
+
+### Redesign Scan Flow (Receipt/Screenshot Import)
+- [x] Replace email scanning with photo/screenshot import (camera + photo library)
+- [x] Use server's built-in LLM to extract subscription info from receipt images
+- [x] Keep manual subscription entry as primary flow
+
+### Redesign Cancellation Flow (Open in Mail App)
+- [x] Replace OAuth-based email sending with expo-mail-composer
+- [x] AI generates the aggressive email, user sends from their own mail app
+- [x] No credentials needed — works for every user out of the box
+
+### Cleanup
+- [x] Update tests for new flows
+- [ ] Remove unused email-providers.ts and email-scanner.ts (kept for reference, not imported)
+- [x] Remove GMAIL_CLIENT_ID/SECRET and OUTLOOK_CLIENT_ID/SECRET env vars (no longer required)

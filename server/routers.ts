@@ -4,15 +4,12 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, adminProcedure, router } from "./_core/trpc";
 import * as db from "./db";
-import { extractSubscriptionsFromBatch } from "./ai-extraction";
-import { scanEmailsForSubscriptions } from "./email-scanner";
-import { refreshAccessToken } from "./email-providers";
+import { extractSubscriptionsFromImage } from "./ai-extraction";
 import {
   getProviderContact,
   generateCancellationEmail,
-  sendCancellationViaGmail,
-  sendCancellationViaOutlook,
 } from "./cancellation-service";
+import { storagePut } from "./storage";
 
 export const appRouter = router({
   system: systemRouter,
@@ -34,8 +31,6 @@ export const appRouter = router({
     update: protectedProcedure
       .input(z.object({
         onboardingComplete: z.boolean().optional(),
-        connectedGmail: z.boolean().optional(),
-        connectedOutlook: z.boolean().optional(),
         currency: z.string().max(3).optional(),
         notificationsEnabled: z.boolean().optional(),
       }))
@@ -161,101 +156,79 @@ export const appRouter = router({
   }),
 
   scan: router({
-    start: protectedProcedure
-      .input(z.object({ provider: z.enum(["gmail", "outlook"]) }))
+    // Upload a receipt/screenshot image and extract subscriptions via AI vision
+    uploadAndExtract: protectedProcedure
+      .input(z.object({
+        imageBase64: z.string().min(1),
+        mimeType: z.string().default("image/jpeg"),
+      }))
       .mutation(async ({ ctx, input }) => {
         const profile = await db.getOrCreateProfile(ctx.user.id);
-        if (profile?.plan === "free" && (profile.scansThisMonth ?? 0) >= 1) {
-          throw new Error("Free plan limited to 1 scan per month. Upgrade to Pro for unlimited scans.");
+        if (profile?.plan === "free" && (profile.scansThisMonth ?? 0) >= 3) {
+          throw new Error("Free plan limited to 3 scans per month. Upgrade to Pro for unlimited scans.");
         }
 
-        const jobId = await db.createScanJob({
-          userId: ctx.user.id,
-          provider: input.provider,
-          status: "connecting",
+        // Upload image to S3
+        const buffer = Buffer.from(input.imageBase64, "base64");
+        const ext = input.mimeType.includes("png") ? "png" : "jpg";
+        const fileKey = `scans/${ctx.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { url: imageUrl } = await storagePut(fileKey, buffer, input.mimeType);
+
+        // Extract subscriptions from image using AI vision
+        const result = await extractSubscriptionsFromImage(imageUrl);
+
+        if (!result.isSubscriptionEmail || result.subscriptions.length === 0) {
+          return {
+            success: true,
+            subscriptionsFound: 0,
+            subscriptions: [],
+            message: "No subscription or billing information found in this image. Try a clearer screenshot of a billing email, receipt, or invoice.",
+          };
+        }
+
+        // Save found subscriptions (skip duplicates)
+        let subsAdded = 0;
+        const addedSubs: Array<{ name: string; provider: string; amount: number; billingCycle: string }> = [];
+
+        for (const sub of result.subscriptions) {
+          const existing = await db.findDuplicateSubscription(ctx.user.id, sub.name, sub.provider);
+          if (!existing) {
+            await db.createSubscription({
+              userId: ctx.user.id,
+              name: sub.name,
+              provider: sub.provider,
+              amount: String(sub.amount),
+              currency: sub.currency || "USD",
+              billingCycle: sub.billingCycle || "monthly",
+              category: sub.category || "other",
+              status: "active",
+              nextRenewalDate: sub.nextRenewalDate ? new Date(sub.nextRenewalDate) : null,
+              detectedFrom: "receipt_scan",
+            });
+            subsAdded++;
+            addedSubs.push({
+              name: sub.name,
+              provider: sub.provider,
+              amount: sub.amount,
+              billingCycle: sub.billingCycle || "monthly",
+            });
+          }
+        }
+
+        // Update scan count
+        await db.updateProfile(ctx.user.id, {
+          scansThisMonth: (profile?.scansThisMonth ?? 0) + 1,
         });
 
-        const emailToken = await db.getEmailToken(ctx.user.id, input.provider);
-        const useRealScan = !!emailToken;
-
-        setTimeout(async () => {
-          try {
-            await db.updateScanJob(jobId, { status: "scanning", emailsScanned: 0 });
-            let allSubscriptions: any[] = [];
-            let emailCount = 0;
-
-            if (useRealScan && emailToken) {
-              let accessToken = emailToken.accessToken;
-              if (emailToken.expiresAt && new Date(emailToken.expiresAt) < new Date() && emailToken.refreshToken) {
-                try {
-                  const refreshed = await refreshAccessToken(input.provider, emailToken.refreshToken);
-                  accessToken = refreshed.accessToken;
-                  await db.saveEmailToken({
-                    userId: ctx.user.id, provider: input.provider,
-                    accessToken: refreshed.accessToken, refreshToken: emailToken.refreshToken,
-                    expiresAt: refreshed.expiresIn ? new Date(Date.now() + refreshed.expiresIn * 1000) : null,
-                    email: emailToken.email,
-                  });
-                } catch (refreshErr) { console.error("[Scan] Token refresh failed:", refreshErr); }
-              }
-              await db.updateScanJob(jobId, { status: "scanning" });
-              const subs = await scanEmailsForSubscriptions(input.provider, accessToken);
-              allSubscriptions = subs;
-              emailCount = subs.length > 0 ? Math.max(subs.length * 3, 10) : 0;
-            } else {
-              emailCount = Math.floor(Math.random() * 50) + 20;
-              await db.updateScanJob(jobId, { status: "scanning", emailsScanned: emailCount });
-            }
-
-            await db.updateScanJob(jobId, { status: "analyzing" });
-
-            let result;
-            if (useRealScan && allSubscriptions.length > 0) {
-              result = { subscriptions: allSubscriptions };
-            } else {
-              const sampleEmails = generateSampleBillingEmails();
-              result = await extractSubscriptionsFromBatch(sampleEmails);
-            }
-
-            let subsFound = 0;
-            for (const sub of result.subscriptions) {
-              const existing = await db.findDuplicateSubscription(ctx.user.id, sub.name, sub.provider);
-              if (!existing) {
-                await db.createSubscription({
-                  userId: ctx.user.id, name: sub.name, provider: sub.provider,
-                  amount: String(sub.amount), currency: sub.currency || "USD",
-                  billingCycle: sub.billingCycle || "monthly", category: sub.category || "other",
-                  status: "active",
-                  nextRenewalDate: sub.nextRenewalDate ? new Date(sub.nextRenewalDate) : null,
-                  detectedFrom: input.provider,
-                });
-                subsFound++;
-              }
-            }
-
-            await db.updateScanJob(jobId, {
-              status: "completed", emailsScanned: emailCount,
-              subscriptionsFound: subsFound, completedAt: new Date(),
-            });
-            await db.updateProfile(ctx.user.id, { scansThisMonth: (profile?.scansThisMonth ?? 0) + 1 });
-          } catch (error) {
-            console.error("[Scan] Job failed:", error);
-            await db.updateScanJob(jobId, { status: "failed" });
-          }
-        }, 2000);
-
-        return { jobId };
+        return {
+          success: true,
+          subscriptionsFound: subsAdded,
+          subscriptions: addedSubs,
+          message: subsAdded > 0
+            ? `Found and added ${subsAdded} subscription${subsAdded > 1 ? "s" : ""}!`
+            : "All subscriptions in this image are already tracked.",
+        };
       }),
-
-    status: protectedProcedure
-      .input(z.object({ jobId: z.number() }))
-      .query(async ({ input }) => {
-        return db.getScanJob(input.jobId);
-      }),
-
-    history: protectedProcedure.query(async ({ ctx }) => {
-      return db.getUserScanJobs(ctx.user.id);
-    }),
   }),
 
   cancellation: router({
@@ -286,8 +259,8 @@ export const appRouter = router({
         };
       }),
 
-    // Preview the cancellation email before sending
-    previewEmail: protectedProcedure
+    // Generate the cancellation email content (user sends via their own mail app)
+    generateEmail: protectedProcedure
       .input(z.object({
         subscriptionId: z.number(),
         customProviderEmail: z.string().email().optional(),
@@ -296,6 +269,12 @@ export const appRouter = router({
         const subs = await db.getUserSubscriptions(ctx.user.id);
         const sub = subs.find((s) => s.id === input.subscriptionId);
         if (!sub) throw new Error("Subscription not found");
+
+        // Check Pro plan
+        const profile = await db.getOrCreateProfile(ctx.user.id);
+        if (profile?.plan !== "pro") {
+          throw new Error("Cancel For Me is a Pro feature. Upgrade to Pro to generate cancellation emails.");
+        }
 
         const existingRequest = await db.getCancellationRequestForSubscription(ctx.user.id, input.subscriptionId);
         const isFollowUp = !!existingRequest && ["email_sent", "follow_up_sent"].includes(existingRequest.status);
@@ -323,75 +302,19 @@ export const appRouter = router({
         };
       }),
 
-    // Send the cancellation email
-    sendEmail: protectedProcedure
+    // Record that the user sent the cancellation email (called after mail composer closes)
+    recordSent: protectedProcedure
       .input(z.object({
         subscriptionId: z.number(),
         providerEmail: z.string().email(),
         subject: z.string().min(1),
         body: z.string().min(1),
-        emailProvider: z.enum(["gmail", "outlook"]),
       }))
       .mutation(async ({ ctx, input }) => {
         const subs = await db.getUserSubscriptions(ctx.user.id);
         const sub = subs.find((s) => s.id === input.subscriptionId);
         if (!sub) throw new Error("Subscription not found");
 
-        // Check Pro plan
-        const profile = await db.getOrCreateProfile(ctx.user.id);
-        if (profile?.plan !== "pro") {
-          throw new Error("Cancel For Me is a Pro feature. Upgrade to Pro to send cancellation emails.");
-        }
-
-        // Get email token
-        const emailToken = await db.getEmailToken(ctx.user.id, input.emailProvider);
-        if (!emailToken) {
-          throw new Error(`Please connect your ${input.emailProvider === "gmail" ? "Gmail" : "Outlook"} account first to send cancellation emails.`);
-        }
-
-        // Refresh token if needed
-        let accessToken = emailToken.accessToken;
-        if (emailToken.expiresAt && new Date(emailToken.expiresAt) < new Date() && emailToken.refreshToken) {
-          try {
-            const refreshed = await refreshAccessToken(input.emailProvider, emailToken.refreshToken);
-            accessToken = refreshed.accessToken;
-            await db.saveEmailToken({
-              userId: ctx.user.id,
-              provider: input.emailProvider,
-              accessToken: refreshed.accessToken,
-              refreshToken: emailToken.refreshToken,
-              expiresAt: refreshed.expiresIn ? new Date(Date.now() + refreshed.expiresIn * 1000) : null,
-              email: emailToken.email,
-            });
-          } catch (err) {
-            throw new Error("Failed to refresh email token. Please reconnect your email account.");
-          }
-        }
-
-        // Send the email
-        let sendResult;
-        if (input.emailProvider === "gmail") {
-          sendResult = await sendCancellationViaGmail(
-            accessToken,
-            emailToken.email || ctx.user.email || "",
-            input.providerEmail,
-            input.subject,
-            input.body
-          );
-        } else {
-          sendResult = await sendCancellationViaOutlook(
-            accessToken,
-            input.providerEmail,
-            input.subject,
-            input.body
-          );
-        }
-
-        if (!sendResult.success) {
-          throw new Error(sendResult.error || "Failed to send cancellation email");
-        }
-
-        // Track the cancellation request
         const existingRequest = await db.getCancellationRequestForSubscription(ctx.user.id, input.subscriptionId);
         if (existingRequest && ["email_sent", "follow_up_sent"].includes(existingRequest.status)) {
           // Follow-up
@@ -418,7 +341,7 @@ export const appRouter = router({
         // Update subscription status to cancelled
         await db.updateSubscription(input.subscriptionId, ctx.user.id, { status: "cancelled" });
 
-        return { success: true, message: "Cancellation email sent successfully!" };
+        return { success: true, message: "Cancellation recorded!" };
       }),
 
     // Get all cancellation requests for the user
@@ -523,18 +446,5 @@ export const appRouter = router({
     }),
   }),
 });
-
-function generateSampleBillingEmails(): string[] {
-  return [
-    `Subject: Your Netflix subscription renewal\nFrom: info@netflix.com\nDate: 2025-03-15\n\nYour Netflix Premium subscription has been renewed.\nAmount charged: $22.99\nBilling period: Monthly\nNext billing date: April 15, 2025`,
-    `Subject: Spotify Premium - Payment Confirmation\nFrom: no-reply@spotify.com\nDate: 2025-03-10\n\nThank you for your payment.\nPlan: Spotify Premium Individual\nAmount: $10.99/month\nNext payment: April 10, 2025`,
-    `Subject: Your iCloud+ storage plan\nFrom: no_reply@email.apple.com\nDate: 2025-03-01\n\nYour iCloud+ subscription renewal.\niCloud+ 200GB\nAmount: $2.99/month\nNext renewal: April 1, 2025`,
-    `Subject: GitHub Pro - Invoice\nFrom: billing@github.com\nDate: 2025-03-05\n\nGitHub Pro subscription invoice.\nAmount: $4.00/month\nBilling cycle: Monthly\nNext billing: April 5, 2025`,
-    `Subject: Adobe Creative Cloud - Payment Receipt\nFrom: mail@adobe.com\nDate: 2025-02-20\n\nPayment received for Adobe Creative Cloud All Apps.\nAmount: $54.99/month\nNext payment: March 20, 2025`,
-    `Subject: Your ChatGPT Plus subscription\nFrom: noreply@openai.com\nDate: 2025-03-12\n\nChatGPT Plus subscription renewed.\nAmount: $20.00/month\nNext billing: April 12, 2025`,
-    `Subject: AWS Monthly Invoice\nFrom: aws-billing@amazon.com\nDate: 2025-03-01\n\nAmazon Web Services billing statement.\nTotal: $45.67\nBilling period: Monthly\nService: AWS Cloud Services`,
-    `Subject: YouTube Premium - Payment\nFrom: payments-noreply@google.com\nDate: 2025-03-08\n\nYouTube Premium Family plan payment.\nAmount: $22.99/month\nNext billing: April 8, 2025`,
-  ];
-}
 
 export type AppRouter = typeof appRouter;

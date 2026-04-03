@@ -253,7 +253,7 @@ describe("Cancellation Routes", () => {
   });
 
   it("should preview a cancellation email", async () => {
-    const result = await caller.cancellation.previewEmail({ subscriptionId: 1 });
+    const result = await caller.cancellation.generateEmail({ subscriptionId: 1 });
     expect(result).toBeDefined();
     expect(result.subject).toContain("CANCELLATION");
     expect(result.body.length).toBeGreaterThan(0);

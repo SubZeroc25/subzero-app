@@ -1,13 +1,14 @@
-import { Text, View, ScrollView, TextInput, Pressable, Platform, Alert, ActivityIndicator } from "react-native";
+import { Text, View, ScrollView, TextInput, TouchableOpacity, Platform, Alert, ActivityIndicator } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
+import * as MailComposer from "expo-mail-composer";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 
-type CancellationStep = "loading" | "info" | "preview" | "sending" | "sent" | "error";
+type CancellationStep = "loading" | "info" | "preview" | "opening_mail" | "sent" | "error";
 
 export default function CancelSubscriptionScreen() {
   const router = useRouter();
@@ -23,7 +24,6 @@ export default function CancelSubscriptionScreen() {
   const [providerEmail, setProviderEmail] = useState("");
   const [isFollowUp, setIsFollowUp] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [emailProvider, setEmailProvider] = useState<"gmail" | "outlook">("gmail");
 
   // Fetch provider info
   const providerInfoQuery = trpc.cancellation.getProviderInfo.useQuery(
@@ -31,14 +31,11 @@ export default function CancelSubscriptionScreen() {
     { enabled: !!subscriptionId }
   );
 
-  // Profile to check connected email
-  const profileQuery = trpc.profile.get.useQuery();
+  // Generate email mutation
+  const generateMutation = trpc.cancellation.generateEmail.useMutation();
 
-  // Preview mutation
-  const previewMutation = trpc.cancellation.previewEmail.useMutation();
-
-  // Send mutation
-  const sendMutation = trpc.cancellation.sendEmail.useMutation();
+  // Record sent mutation
+  const recordSentMutation = trpc.cancellation.recordSent.useMutation();
 
   useEffect(() => {
     if (providerInfoQuery.data) {
@@ -56,19 +53,12 @@ export default function CancelSubscriptionScreen() {
     }
   }, [providerInfoQuery.data, providerInfoQuery.error]);
 
-  useEffect(() => {
-    if (profileQuery.data) {
-      if (profileQuery.data.connectedGmail) setEmailProvider("gmail");
-      else if (profileQuery.data.connectedOutlook) setEmailProvider("outlook");
-    }
-  }, [profileQuery.data]);
-
   const handleGeneratePreview = async () => {
     if (!subscriptionId) return;
     setStep("loading");
 
     try {
-      const result = await previewMutation.mutateAsync({
+      const result = await generateMutation.mutateAsync({
         subscriptionId,
         customProviderEmail: useCustomEmail ? customEmail : undefined,
       });
@@ -85,46 +75,68 @@ export default function CancelSubscriptionScreen() {
     }
   };
 
-  const handleSendEmail = async () => {
+  const handleOpenMailApp = async () => {
     if (!subscriptionId) return;
 
-    const doSend = async () => {
-      setStep("sending");
-      try {
-        await sendMutation.mutateAsync({
+    try {
+      setStep("opening_mail");
+
+      // Check if mail composer is available
+      const isAvailable = await MailComposer.isAvailableAsync();
+
+      if (!isAvailable) {
+        // Fallback: show the email content for manual copy
+        Alert.alert(
+          "No Mail App Found",
+          "Please copy the email content below and send it manually to " + providerEmail,
+          [{ text: "OK", onPress: () => setStep("preview") }]
+        );
+        return;
+      }
+
+      const result = await MailComposer.composeAsync({
+        recipients: [providerEmail],
+        subject: emailSubject,
+        body: emailBody,
+        isHtml: false,
+      });
+
+      if (result.status === MailComposer.MailComposerStatus.SENT) {
+        // Record that the email was sent
+        await recordSentMutation.mutateAsync({
           subscriptionId,
           providerEmail,
           subject: emailSubject,
           body: emailBody,
-          emailProvider,
         });
         setStep("sent");
         if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } catch (error: any) {
-        setStep("error");
-        setErrorMessage(error.message || "Failed to send cancellation email");
-        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      } else if (result.status === MailComposer.MailComposerStatus.CANCELLED) {
+        // User cancelled - go back to preview
+        setStep("preview");
+      } else {
+        // Saved or undetermined - assume they might send it
+        // Record optimistically
+        await recordSentMutation.mutateAsync({
+          subscriptionId,
+          providerEmail,
+          subject: emailSubject,
+          body: emailBody,
+        });
+        setStep("sent");
+        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-    };
-
-    if (Platform.OS === "web") {
-      if (confirm(`Send aggressive cancellation email to ${providerEmail}?`)) doSend();
-    } else {
-      Alert.alert(
-        "Send Cancellation Email",
-        `This will send an aggressive cancellation email to ${providerEmail} from your connected ${emailProvider === "gmail" ? "Gmail" : "Outlook"} account.\n\nThe email demands immediate cancellation and references consumer protection laws.\n\nProceed?`,
-        [
-          { text: "Cancel", style: "cancel" },
-          { text: "Send It", style: "destructive", onPress: doSend },
-        ]
-      );
+    } catch (error: any) {
+      console.error("[Cancel] Mail composer error:", error);
+      setStep("error");
+      setErrorMessage(error.message || "Failed to open mail app");
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     }
   };
 
   const sub = providerInfoQuery.data?.subscription;
   const contact = providerInfoQuery.data?.providerContact;
   const existingRequest = providerInfoQuery.data?.existingRequest;
-  const hasConnectedEmail = profileQuery.data?.connectedGmail || profileQuery.data?.connectedOutlook;
 
   const renderInfoStep = () => (
     <View className="flex-1 gap-5">
@@ -154,14 +166,11 @@ export default function CancelSubscriptionScreen() {
             <Text className="text-xs text-muted mb-3">
               We found {contact.name}'s support email in our database.
             </Text>
-            <Pressable
-              onPress={() => setUseCustomEmail(true)}
-              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-            >
+            <TouchableOpacity onPress={() => setUseCustomEmail(true)} activeOpacity={0.7}>
               <Text className="text-xs font-medium" style={{ color: colors.primary }}>
                 Use a different email instead
               </Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         ) : (
           <View>
@@ -190,17 +199,18 @@ export default function CancelSubscriptionScreen() {
               }}
             />
             {contact && (
-              <Pressable
+              <TouchableOpacity
                 onPress={() => {
                   setUseCustomEmail(false);
                   setCustomEmail("");
                 }}
-                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1, marginTop: 8 }]}
+                activeOpacity={0.7}
+                style={{ marginTop: 8 }}
               >
                 <Text className="text-xs font-medium" style={{ color: colors.primary }}>
                   Use detected email ({contact.email})
                 </Text>
-              </Pressable>
+              </TouchableOpacity>
             )}
           </View>
         )}
@@ -225,132 +235,62 @@ export default function CancelSubscriptionScreen() {
         </View>
       )}
 
-      {/* Connected Email Check */}
-      {!hasConnectedEmail && (
-        <View
-          className="rounded-2xl p-4 border"
-          style={{ backgroundColor: colors.error + "10", borderColor: colors.error + "30" }}
-        >
-          <View className="flex-row items-center gap-2 mb-2">
-            <IconSymbol name="exclamationmark.triangle.fill" size={16} color={colors.error} />
-            <Text className="text-sm font-semibold text-error">Email Not Connected</Text>
-          </View>
-          <Text className="text-xs text-muted">
-            You need to connect your Gmail or Outlook account in Profile to send cancellation emails.
-          </Text>
-        </View>
-      )}
-
-      {/* Email Provider Selector */}
-      {hasConnectedEmail && (
-        <View className="rounded-2xl p-4 border border-border" style={{ backgroundColor: colors.surface }}>
-          <Text className="text-sm font-semibold text-foreground mb-2">Send From</Text>
-          <View className="flex-row gap-3">
-            {profileQuery.data?.connectedGmail && (
-              <Pressable
-                onPress={() => {
-                  setEmailProvider("gmail");
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                style={({ pressed }) => [{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 10,
-                  alignItems: "center" as const,
-                  backgroundColor: emailProvider === "gmail" ? colors.primary + "15" : colors.background,
-                  borderWidth: 1,
-                  borderColor: emailProvider === "gmail" ? colors.primary : colors.border,
-                  opacity: pressed ? 0.8 : 1,
-                }]}
-              >
-                <Text
-                  className="text-sm font-medium"
-                  style={{ color: emailProvider === "gmail" ? colors.primary : colors.foreground }}
-                >
-                  Gmail
-                </Text>
-              </Pressable>
-            )}
-            {profileQuery.data?.connectedOutlook && (
-              <Pressable
-                onPress={() => {
-                  setEmailProvider("outlook");
-                  if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                }}
-                style={({ pressed }) => [{
-                  flex: 1,
-                  paddingVertical: 12,
-                  borderRadius: 10,
-                  alignItems: "center" as const,
-                  backgroundColor: emailProvider === "outlook" ? colors.primary + "15" : colors.background,
-                  borderWidth: 1,
-                  borderColor: emailProvider === "outlook" ? colors.primary : colors.border,
-                  opacity: pressed ? 0.8 : 1,
-                }]}
-              >
-                <Text
-                  className="text-sm font-medium"
-                  style={{ color: emailProvider === "outlook" ? colors.primary : colors.foreground }}
-                >
-                  Outlook
-                </Text>
-              </Pressable>
-            )}
-          </View>
-        </View>
-      )}
-
-      {/* What Happens Section */}
+      {/* How it works */}
       <View className="rounded-2xl p-4 border border-border" style={{ backgroundColor: colors.surface }}>
-        <Text className="text-sm font-semibold text-foreground mb-3">What happens next?</Text>
+        <Text className="text-sm font-semibold text-foreground mb-3">How it works</Text>
         <View className="gap-3">
           {[
-            { icon: "pencil" as const, text: "AI generates an aggressive cancellation email citing consumer protection laws" },
-            { icon: "eye.fill" as const, text: "You review and can edit the email before sending" },
-            { icon: "paperplane.fill" as const, text: `Email is sent from your ${emailProvider === "gmail" ? "Gmail" : "Outlook"} to the provider` },
-            { icon: "exclamationmark.triangle.fill" as const, text: "If no response, you can send escalating follow-ups" },
+            { icon: "sparkles" as const, text: "AI generates an aggressive cancellation email citing consumer protection laws" },
+            { icon: "pencil" as const, text: "You review and edit the email before sending" },
+            { icon: "paperplane.fill" as const, text: "Opens your mail app with the email pre-filled — you hit send" },
           ].map((item, i) => (
             <View key={i} className="flex-row items-start gap-3">
-              <View
-                className="w-7 h-7 rounded-full items-center justify-center mt-0.5"
-                style={{ backgroundColor: colors.primary + "15" }}
-              >
-                <IconSymbol name={item.icon} size={14} color={colors.primary} />
+              <View className="w-6 h-6 rounded-full items-center justify-center" style={{ backgroundColor: colors.primary + "15" }}>
+                <Text className="text-xs font-bold" style={{ color: colors.primary }}>{i + 1}</Text>
               </View>
-              <Text className="text-sm text-muted flex-1 leading-5">{item.text}</Text>
+              <Text className="text-xs text-muted flex-1 leading-relaxed">{item.text}</Text>
             </View>
           ))}
         </View>
       </View>
+
+      {/* Generate Button */}
+      <TouchableOpacity
+        onPress={handleGeneratePreview}
+        className="rounded-xl p-4 items-center"
+        activeOpacity={0.8}
+        style={{ backgroundColor: colors.error }}
+      >
+        <View className="flex-row items-center gap-2">
+          <IconSymbol name="bolt.fill" size={18} color="#fff" />
+          <Text className="text-base font-bold" style={{ color: "#fff" }}>
+            {isFollowUp ? "Generate Follow-Up Email" : "Generate Cancellation Email"}
+          </Text>
+        </View>
+      </TouchableOpacity>
     </View>
   );
 
   const renderPreviewStep = () => (
-    <View className="flex-1 gap-4">
-      {/* Email Header */}
-      <View className="rounded-2xl p-5 border border-border" style={{ backgroundColor: colors.surface }}>
-        <View className="flex-row items-center gap-2 mb-4">
-          <IconSymbol name="envelope.fill" size={20} color={colors.error} />
-          <Text className="text-lg font-bold text-foreground">
-            {isFollowUp ? "Follow-Up Email" : "Cancellation Email"}
-          </Text>
-        </View>
-
-        <View className="gap-2 mb-4">
-          <View className="flex-row">
-            <Text className="text-xs text-muted w-12">To:</Text>
-            <Text className="text-xs text-foreground font-medium flex-1">{providerEmail}</Text>
+    <View className="flex-1 gap-5">
+      {/* Email Preview */}
+      <View className="rounded-2xl border border-border overflow-hidden" style={{ backgroundColor: colors.surface }}>
+        <View className="p-4 border-b border-border">
+          <View className="flex-row items-center gap-2 mb-2">
+            <Text className="text-xs text-muted w-10">To:</Text>
+            <Text className="text-sm text-foreground flex-1">{providerEmail}</Text>
           </View>
-          <View className="flex-row">
-            <Text className="text-xs text-muted w-12">Subj:</Text>
-            <Text className="text-xs text-foreground font-medium flex-1">{emailSubject}</Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="text-xs text-muted w-10">Subj:</Text>
+            <TextInput
+              value={emailSubject}
+              onChangeText={setEmailSubject}
+              style={{ color: colors.foreground, fontSize: 14, fontWeight: "600", flex: 1 }}
+              returnKeyType="done"
+            />
           </View>
         </View>
-
-        <View
-          className="rounded-xl p-4"
-          style={{ backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border }}
-        >
+        <View className="p-4">
           <TextInput
             value={emailBody}
             onChangeText={setEmailBody}
@@ -359,247 +299,155 @@ export default function CancelSubscriptionScreen() {
               color: colors.foreground,
               fontSize: 13,
               lineHeight: 20,
-              minHeight: 250,
+              minHeight: 200,
               textAlignVertical: "top",
             }}
           />
         </View>
+      </View>
 
-        <Text className="text-xs text-muted mt-2 text-center">
-          You can edit the email above before sending
+      {/* Tone indicator */}
+      <View className="flex-row items-center gap-2 px-2">
+        <IconSymbol name="bolt.fill" size={14} color={colors.error} />
+        <Text className="text-xs text-muted flex-1">
+          {isFollowUp
+            ? "Escalated tone — references unanswered previous requests and regulatory action"
+            : "Aggressive but professional — cites consumer protection laws and demands immediate action"}
         </Text>
       </View>
 
-      {/* Tone Indicator */}
-      <View
-        className="rounded-xl p-3 flex-row items-center gap-2"
-        style={{ backgroundColor: colors.error + "10" }}
-      >
-        <IconSymbol name="bolt.fill" size={16} color={colors.error} />
-        <Text className="text-xs font-medium text-error flex-1">
-          {isFollowUp
-            ? `Escalated tone — Follow-up #${(existingRequest?.followUpCount ?? 0) + 1}. References FTC violations and threatens legal action.`
-            : "Firm tone — References consumer protection laws and demands immediate cancellation with written confirmation."}
-        </Text>
+      {/* Action Buttons */}
+      <View className="gap-3">
+        <TouchableOpacity
+          onPress={handleOpenMailApp}
+          className="rounded-xl p-4 items-center"
+          activeOpacity={0.8}
+          style={{ backgroundColor: colors.error }}
+        >
+          <View className="flex-row items-center gap-2">
+            <IconSymbol name="paperplane.fill" size={18} color="#fff" />
+            <Text className="text-base font-bold" style={{ color: "#fff" }}>
+              Open in Mail App
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => setStep("info")}
+          className="rounded-xl p-3 items-center border border-border"
+          activeOpacity={0.8}
+          style={{ backgroundColor: colors.surface }}
+        >
+          <Text className="text-sm font-medium text-foreground">Back to Edit</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
 
   const renderSentStep = () => (
-    <View className="flex-1 items-center justify-center gap-6 px-4">
-      <View
-        className="w-20 h-20 rounded-full items-center justify-center"
-        style={{ backgroundColor: colors.success + "15" }}
-      >
+    <View className="flex-1 items-center justify-center gap-6">
+      <View className="w-24 h-24 rounded-full items-center justify-center" style={{ backgroundColor: colors.success + "15" }}>
         <IconSymbol name="checkmark.circle.fill" size={48} color={colors.success} />
       </View>
       <View className="items-center gap-2">
-        <Text className="text-2xl font-bold text-foreground text-center">
-          Cancellation Email Sent!
-        </Text>
-        <Text className="text-base text-muted text-center leading-6">
-          An aggressive cancellation email has been sent to{"\n"}
-          <Text className="font-semibold text-foreground">{providerEmail}</Text>
+        <Text className="text-2xl font-bold text-foreground">Email Sent!</Text>
+        <Text className="text-sm text-muted text-center px-8">
+          Your cancellation email has been sent to {providerEmail}. The subscription has been marked as cancelled.
         </Text>
       </View>
 
-      <View className="w-full rounded-2xl p-5 border border-border" style={{ backgroundColor: colors.surface }}>
-        <Text className="text-sm font-semibold text-foreground mb-3">What's next?</Text>
-        <View className="gap-3">
-          <View className="flex-row items-start gap-3">
-            <IconSymbol name="clock.fill" size={16} color={colors.warning} />
-            <Text className="text-sm text-muted flex-1">
-              Wait 24-48 hours for the provider to respond
-            </Text>
-          </View>
-          <View className="flex-row items-start gap-3">
-            <IconSymbol name="envelope.fill" size={16} color={colors.primary} />
-            <Text className="text-sm text-muted flex-1">
-              Check your email for a cancellation confirmation
-            </Text>
-          </View>
-          <View className="flex-row items-start gap-3">
-            <IconSymbol name="exclamationmark.triangle.fill" size={16} color={colors.error} />
-            <Text className="text-sm text-muted flex-1">
-              No response? Come back and send an escalated follow-up
-            </Text>
-          </View>
+      <View className="bg-surface rounded-2xl p-4 border border-border w-full">
+        <Text className="text-sm font-semibold text-foreground mb-2">What happens next?</Text>
+        <View className="gap-2">
+          <Text className="text-xs text-muted leading-relaxed">
+            • The provider should respond within 3-5 business days
+          </Text>
+          <Text className="text-xs text-muted leading-relaxed">
+            • If they don't respond, come back and send a follow-up with escalated language
+          </Text>
+          <Text className="text-xs text-muted leading-relaxed">
+            • Your subscription has been marked as "cancelled" in SubZero
+          </Text>
         </View>
       </View>
 
-      <View className="w-full gap-3 mt-4">
-        <Pressable
-          onPress={() => router.back()}
-          style={({ pressed }) => [{
-            backgroundColor: colors.primary,
-            paddingVertical: 16,
-            borderRadius: 14,
-            alignItems: "center" as const,
-            opacity: pressed ? 0.85 : 1,
-            transform: [{ scale: pressed ? 0.98 : 1 }],
-          }]}
-        >
-          <Text className="text-white text-base font-semibold">Done</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-
-  const renderErrorStep = () => (
-    <View className="flex-1 items-center justify-center gap-6 px-4">
-      <View
-        className="w-20 h-20 rounded-full items-center justify-center"
-        style={{ backgroundColor: colors.error + "15" }}
+      <TouchableOpacity
+        onPress={() => router.back()}
+        className="bg-primary rounded-xl p-4 items-center w-full"
+        activeOpacity={0.8}
       >
-        <IconSymbol name="xmark.circle.fill" size={48} color={colors.error} />
-      </View>
-      <View className="items-center gap-2">
-        <Text className="text-xl font-bold text-foreground text-center">Something went wrong</Text>
-        <Text className="text-sm text-muted text-center leading-5">{errorMessage}</Text>
-      </View>
-      <Pressable
-        onPress={() => {
-          setStep("info");
-          setErrorMessage("");
-        }}
-        style={({ pressed }) => [{
-          backgroundColor: colors.primary,
-          paddingHorizontal: 32,
-          paddingVertical: 14,
-          borderRadius: 14,
-          opacity: pressed ? 0.85 : 1,
-        }]}
-      >
-        <Text className="text-white text-base font-semibold">Try Again</Text>
-      </Pressable>
+        <Text className="text-base font-semibold" style={{ color: "#fff" }}>Done</Text>
+      </TouchableOpacity>
     </View>
   );
 
   return (
-    <ScreenContainer edges={["top", "bottom", "left", "right"]}>
-      <View className="flex-1 px-6">
+    <ScreenContainer edges={["top", "bottom", "left", "right"]} className="p-6">
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
         {/* Header */}
-        <View className="flex-row items-center justify-between pt-4 pb-4">
-          <View className="flex-row items-center gap-3">
-            {step === "preview" && (
-              <Pressable
-                onPress={() => setStep("info")}
-                style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 4 }]}
-              >
-                <IconSymbol name="arrow.left" size={22} color={colors.foreground} />
-              </Pressable>
-            )}
-            <View>
-              <Text className="text-xl font-bold text-error">
-                {isFollowUp ? "Send Follow-Up" : "Cancel For Me"}
-              </Text>
-              <Text className="text-xs text-muted">
-                {step === "preview" ? "Review & edit before sending" : "AI-powered cancellation"}
-              </Text>
-            </View>
-          </View>
-          <Pressable
+        <View className="flex-row items-center mb-6">
+          <TouchableOpacity
             onPress={() => router.back()}
-            style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 8 }]}
+            style={{ padding: 8, marginRight: 8 }}
           >
-            <IconSymbol name="xmark" size={24} color={colors.foreground} />
-          </Pressable>
+            <IconSymbol name="xmark" size={20} color={colors.foreground} />
+          </TouchableOpacity>
+          <View className="flex-1">
+            <Text className="text-xl font-bold text-foreground">Cancel For Me</Text>
+            {sub && <Text className="text-xs text-muted">{sub.name}</Text>}
+          </View>
+          {isFollowUp && (
+            <View className="px-3 py-1 rounded-full" style={{ backgroundColor: colors.warning + "20" }}>
+              <Text className="text-xs font-semibold" style={{ color: colors.warning }}>Follow-Up</Text>
+            </View>
+          )}
         </View>
 
-        {/* Content */}
-        {(step === "loading" || step === "sending") ? (
+        {/* Loading */}
+        {(step === "loading" || step === "opening_mail") && (
           <View className="flex-1 items-center justify-center gap-4">
             <ActivityIndicator size="large" color={colors.primary} />
-            <Text className="text-base text-muted">
-              {step === "sending" ? "Sending cancellation email..." : "Loading..."}
+            <Text className="text-sm text-muted">
+              {step === "opening_mail" ? "Opening mail app..." : "Generating email..."}
             </Text>
           </View>
-        ) : step === "sent" ? (
-          renderSentStep()
-        ) : step === "error" ? (
-          renderErrorStep()
-        ) : (
-          <>
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={{ paddingBottom: 20 }}
-            >
-              {step === "info" && renderInfoStep()}
-              {step === "preview" && renderPreviewStep()}
-            </ScrollView>
-
-            {/* Bottom Action Button */}
-            <View className="gap-3 pb-4">
-              {step === "info" && (
-                <Pressable
-                  onPress={handleGeneratePreview}
-                  disabled={!hasConnectedEmail || (!contact && !customEmail) || (useCustomEmail && !customEmail)}
-                  style={({ pressed }) => [{
-                    backgroundColor: (!hasConnectedEmail || (!contact && !customEmail) || (useCustomEmail && !customEmail))
-                      ? colors.muted : colors.error,
-                    paddingVertical: 16,
-                    borderRadius: 14,
-                    alignItems: "center" as const,
-                    flexDirection: "row" as const,
-                    justifyContent: "center" as const,
-                    gap: 8,
-                    opacity: pressed ? 0.85 : 1,
-                    transform: [{ scale: pressed ? 0.98 : 1 }],
-                  }]}
-                >
-                  <IconSymbol name="bolt.fill" size={18} color="#FFFFFF" />
-                  <Text className="text-white text-base font-semibold">
-                    {isFollowUp ? "Generate Follow-Up Email" : "Generate Cancellation Email"}
-                  </Text>
-                </Pressable>
-              )}
-
-              {step === "preview" && (
-                <View className="gap-3">
-                  <Pressable
-                    onPress={handleGeneratePreview}
-                    style={({ pressed }) => [{
-                      backgroundColor: colors.surface,
-                      paddingVertical: 14,
-                      borderRadius: 14,
-                      alignItems: "center" as const,
-                      flexDirection: "row" as const,
-                      justifyContent: "center" as const,
-                      gap: 8,
-                      borderWidth: 1,
-                      borderColor: colors.border,
-                      opacity: pressed ? 0.85 : 1,
-                    }]}
-                  >
-                    <IconSymbol name="arrow.clockwise" size={16} color={colors.foreground} />
-                    <Text className="text-foreground text-sm font-medium">Regenerate Email</Text>
-                  </Pressable>
-
-                  <Pressable
-                    onPress={handleSendEmail}
-                    style={({ pressed }) => [{
-                      backgroundColor: colors.error,
-                      paddingVertical: 16,
-                      borderRadius: 14,
-                      alignItems: "center" as const,
-                      flexDirection: "row" as const,
-                      justifyContent: "center" as const,
-                      gap: 8,
-                      opacity: pressed ? 0.85 : 1,
-                      transform: [{ scale: pressed ? 0.98 : 1 }],
-                    }]}
-                  >
-                    <IconSymbol name="paperplane.fill" size={18} color="#FFFFFF" />
-                    <Text className="text-white text-base font-bold">
-                      {isFollowUp ? "Send Escalated Follow-Up" : "Send Cancellation Email"}
-                    </Text>
-                  </Pressable>
-                </View>
-              )}
-            </View>
-          </>
         )}
-      </View>
+
+        {/* Error */}
+        {step === "error" && (
+          <View className="flex-1 items-center justify-center gap-6">
+            <View className="w-20 h-20 rounded-full items-center justify-center" style={{ backgroundColor: colors.error + "15" }}>
+              <IconSymbol name="xmark" size={36} color={colors.error} />
+            </View>
+            <Text className="text-base text-muted text-center px-8">{errorMessage}</Text>
+            <View className="gap-3 w-full">
+              <TouchableOpacity
+                onPress={() => setStep("info")}
+                className="bg-primary rounded-xl p-4 items-center"
+                activeOpacity={0.8}
+              >
+                <Text className="text-base font-semibold" style={{ color: "#fff" }}>Try Again</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => router.back()}
+                className="bg-surface rounded-xl p-3 items-center border border-border"
+                activeOpacity={0.8}
+              >
+                <Text className="text-sm font-medium text-foreground">Go Back</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
+        {/* Info Step */}
+        {step === "info" && renderInfoStep()}
+
+        {/* Preview Step */}
+        {step === "preview" && renderPreviewStep()}
+
+        {/* Sent Step */}
+        {step === "sent" && renderSentStep()}
+      </ScrollView>
     </ScreenContainer>
   );
 }

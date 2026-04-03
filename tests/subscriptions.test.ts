@@ -192,23 +192,14 @@ describe("Subscription Routes", () => {
 describe("Scan Routes", () => {
   const caller = appRouter.createCaller(createMockContext(true));
 
-  it("should start a scan job", async () => {
-    const result = await caller.scan.start({ provider: "gmail" });
-    expect(result).toBeDefined();
-    expect(result.jobId).toBe(1);
+  it("should have uploadAndExtract mutation", () => {
+    expect(caller.scan.uploadAndExtract).toBeDefined();
   });
 
-  it("should get scan status", async () => {
-    const status = await caller.scan.status({ jobId: 1 });
-    expect(status).toBeDefined();
-    expect(status?.status).toBe("completed");
-    expect(status?.emailsScanned).toBe(35);
-    expect(status?.subscriptionsFound).toBe(5);
-  });
-
-  it("should get scan history", async () => {
-    const history = await caller.scan.history();
-    expect(Array.isArray(history)).toBe(true);
+  it("should reject empty image data", async () => {
+    await expect(
+      caller.scan.uploadAndExtract({ imageBase64: "", mimeType: "image/jpeg" })
+    ).rejects.toThrow();
   });
 });
 
@@ -233,7 +224,7 @@ describe("Auth Guard", () => {
     await expect(unauthCaller.profile.get()).rejects.toThrow();
     await expect(unauthCaller.subscriptions.list()).rejects.toThrow();
     await expect(unauthCaller.analytics.spending()).rejects.toThrow();
-    await expect(unauthCaller.scan.history()).rejects.toThrow();
+    await expect(unauthCaller.scan.uploadAndExtract({ imageBase64: "test", mimeType: "image/jpeg" })).rejects.toThrow();
   });
 
   it("should allow access to public auth routes", async () => {
