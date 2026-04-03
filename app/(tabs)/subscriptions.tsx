@@ -9,22 +9,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 import { useState, useMemo, useCallback } from "react";
+import { SubscriptionCard } from "@/components/subscription-card";
 
 type FilterType = "all" | "active" | "cancelled" | "trial";
-
-const CATEGORY_COLORS: Record<string, string> = {
-  entertainment: "#EF4444",
-  productivity: "#3B82F6",
-  cloud: "#8B5CF6",
-  finance: "#10B981",
-  health: "#F59E0B",
-  education: "#06B6D4",
-  shopping: "#EC4899",
-  news: "#6366F1",
-  social: "#14B8A6",
-  utilities: "#64748B",
-  other: "#9CA3AF",
-};
 
 export default function SubscriptionsScreen() {
   const router = useRouter();
@@ -194,105 +181,14 @@ export default function SubscriptionsScreen() {
               )}
             </View>
           }
-          renderItem={({ item }) => {
-            const catColor = CATEGORY_COLORS[item.category] || CATEGORY_COLORS.other;
-            return (
-              <Pressable
-                onPress={() => router.push(`/edit-subscription?id=${item.id}` as any)}
-                style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-              >
-                <View className="bg-surface rounded-xl border border-border p-4 mb-3">
-                  <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-3 flex-1">
-                    <View
-                      className="w-11 h-11 rounded-xl items-center justify-center"
-                      style={{ backgroundColor: catColor + "15" }}
-                    >
-                      <Text className="text-base font-bold" style={{ color: catColor }}>
-                        {item.name.charAt(0).toUpperCase()}
-                      </Text>
-                    </View>
-                    <View className="flex-1">
-                      <Text className="text-sm font-semibold text-foreground" numberOfLines={1}>
-                        {item.name}
-                      </Text>
-                      <View className="flex-row items-center gap-2 mt-0.5">
-                        <Text className="text-xs text-muted">{item.provider}</Text>
-                        <View className="w-1 h-1 rounded-full bg-muted" />
-                        <Text className="text-xs text-muted capitalize">{item.billingCycle}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <View className="items-end">
-                    <Text className="text-base font-bold text-foreground">
-                      ${Number(item.amount).toFixed(2)}
-                    </Text>
-                    <View
-                      className="px-2 py-0.5 rounded-full mt-1"
-                      style={{
-                        backgroundColor:
-                          item.status === "active"
-                            ? colors.success + "15"
-                            : item.status === "trial"
-                            ? colors.warning + "15"
-                            : colors.error + "15",
-                      }}
-                    >
-                      <Text
-                        className="text-[10px] font-medium capitalize"
-                        style={{
-                          color:
-                            item.status === "active"
-                              ? colors.success
-                              : item.status === "trial"
-                              ? colors.warning
-                              : colors.error,
-                        }}
-                      >
-                        {item.status}
-                      </Text>
-                    </View>
-                  </View>
-                </View>
-                {/* Actions */}
-                <View className="flex-row gap-2 mt-3 pt-3 border-t border-border">
-                  {item.status === "active" && (
-                    <Pressable
-                      onPress={() => handleCancel(item.id)}
-                      style={({ pressed }) => [
-                        {
-                          flex: 1,
-                          backgroundColor: colors.warning + "10",
-                          paddingVertical: 8,
-                          borderRadius: 8,
-                          alignItems: "center",
-                          opacity: pressed ? 0.7 : 1,
-                        },
-                      ]}
-                    >
-                      <Text className="text-xs font-medium text-warning">Mark Cancelled</Text>
-                    </Pressable>
-                  )}
-                  <Pressable
-                    onPress={() => handleDelete(item.id, item.name)}
-                    style={({ pressed }) => [
-                      {
-                        flex: 1,
-                        backgroundColor: colors.error + "10",
-                        paddingVertical: 8,
-                        borderRadius: 8,
-                        alignItems: "center",
-                        opacity: pressed ? 0.7 : 1,
-                      },
-                    ]}
-                  >
-                    <Text className="text-xs font-medium text-error">Remove</Text>
-                  </Pressable>
-                  </View>
-                </View>
-              </Pressable>
-            );
-          }}
+          renderItem={({ item }) => (
+            <SubscriptionCard
+              item={item}
+              onEdit={(id) => router.push(`/edit-subscription?id=${id}` as any)}
+              onDelete={handleDelete}
+              onCancel={handleCancel}
+            />
+          )}
         />
       )}
     </ScreenContainer>

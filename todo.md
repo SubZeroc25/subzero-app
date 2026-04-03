@@ -33,3 +33,12 @@
 - [x] Subscription tap-to-edit modal
 - [x] Edit subscription form with all fields
 - [ ] End-to-end OAuth testing verification
+
+## Phase 2: Enhanced Features
+
+- [x] Swipe-to-delete gesture on subscription cards
+- [x] Gmail OAuth configuration and credential setup
+- [x] Outlook OAuth configuration and credential setup
+- [x] Push notification system for renewal reminders
+- [x] Renewal reminder scheduling logic
+- [x] Notification permission handling
