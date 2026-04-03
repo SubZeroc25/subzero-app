@@ -1,71 +1,88 @@
 /**
  * Custom Expo config plugin to ensure minSdkVersion is correctly set to 24
- * across all Android build configurations, including CMake/NDK builds.
+ * across ALL Android build configurations, including CMake/NDK builds.
  *
- * This fixes the known issue where a stale NDK cache causes the build to
- * use minSdkVersion 22 instead of the configured 24, resulting in:
- * "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
+ * This fixes: "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
  *
- * The plugin:
- * 1. Ensures gradle.properties has android.minSdkVersion=24
- * 2. Sets rootProject.ext.minSdkVersion = 24 directly in root build.gradle
- * 3. Adds a clean task for stale .cxx directories in app/build.gradle
+ * The fix is applied at EVERY level where minSdkVersion can be set:
+ * 1. gradle.properties: android.minSdkVersion=24
+ * 2. settings.gradle: Force version catalog to use minSdk=24 (overrides any -P flag)
+ * 3. root build.gradle: rootProject.ext.set("minSdkVersion", 24)
+ * 4. app/build.gradle: Clean stale .cxx NDK cache directories
  */
 const {
   withGradleProperties,
   withProjectBuildGradle,
   withAppBuildGradle,
+  withSettingsGradle,
 } = require("expo/config-plugins");
 
 const MIN_SDK_VERSION = 24;
 
 /**
- * Ensures gradle.properties has the correct minSdkVersion
+ * Ensures gradle.properties has the correct minSdkVersion.
  */
 function withMinSdkGradleProperties(config) {
   return withGradleProperties(config, (config) => {
     const props = config.modResults;
-
     // Remove any existing android.minSdkVersion entries
     const filtered = props.filter(
       (p) => !(p.type === "property" && p.key === "android.minSdkVersion")
     );
-
     // Add the correct value
     filtered.push({
       type: "property",
       key: "android.minSdkVersion",
       value: String(MIN_SDK_VERSION),
     });
-
     config.modResults = filtered;
     return config;
   });
 }
 
 /**
- * Modifies the root build.gradle to explicitly set rootProject.ext.minSdkVersion
- * at the top level so it runs during project configuration phase,
- * before any subproject evaluation occurs.
+ * Modifies settings.gradle to force the Expo version catalog to use minSdk=24.
  *
- * This ensures that all subprojects using `safeExtGet("minSdkVersion", ...)` 
- * pick up the correct value of 24 instead of their fallback defaults.
+ * The version catalog is created by useExpoVersionCatalog() in settings.gradle.
+ * It reads gradle properties (including command-line -P flags) to override values.
+ * If the build environment passes -Pandroid.minSdkVersion=22, it would override
+ * our gradle.properties value. By replacing useExpoVersionCatalog() with a version
+ * that explicitly sets minSdk=24, we ensure the correct value is always used.
+ */
+function withMinSdkSettingsGradle(config) {
+  return withSettingsGradle(config, (config) => {
+    let contents = config.modResults.contents;
+
+    // Replace the plain useExpoVersionCatalog() call with one that forces minSdk
+    // The override closure runs AFTER gradle properties are applied, so it wins
+    if (contents.includes("expoAutolinking.useExpoVersionCatalog()")) {
+      contents = contents.replace(
+        "expoAutolinking.useExpoVersionCatalog()",
+        `expoAutolinking.useExpoVersionCatalog { catalog ->
+    catalog.version("minSdk", "${MIN_SDK_VERSION}")
+}`
+      );
+    }
+
+    config.modResults.contents = contents;
+    return config;
+  });
+}
+
+/**
+ * Modifies the root build.gradle to explicitly set rootProject.ext.minSdkVersion = 24
+ * at the very top, before any plugin evaluation. This ensures all subprojects
+ * using safeExtGet("minSdkVersion", ...) pick up the correct value.
  */
 function withMinSdkRootBuildGradle(config) {
   return withProjectBuildGradle(config, (config) => {
     let contents = config.modResults.contents;
 
-    // Insert rootProject.ext.minSdkVersion = 24 at the top of build.gradle
-    // This runs during project configuration phase (before evaluation completes)
-    const forceMinSdkBlock = `
-// Force minSdkVersion to ${MIN_SDK_VERSION} to prevent stale NDK cache issues
-// This fixes: "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
+    const forceMinSdkBlock = `// Force minSdkVersion to ${MIN_SDK_VERSION} (fixes hermestooling CXX1214 error)
 rootProject.ext.set("minSdkVersion", ${MIN_SDK_VERSION})
 `;
 
-    // Only add if not already present
     if (!contents.includes("Force minSdkVersion to")) {
-      // Prepend to the top of the file so it runs before any plugin evaluation
       contents = forceMinSdkBlock + contents;
     }
 
@@ -75,7 +92,7 @@ rootProject.ext.set("minSdkVersion", ${MIN_SDK_VERSION})
 }
 
 /**
- * Modifies app/build.gradle to add a pre-build task that cleans stale .cxx directories
+ * Adds a pre-build task to app/build.gradle that cleans stale .cxx directories
  * from native module dependencies, preventing cached minSdkVersion mismatches.
  */
 function withCleanStaleCxxCache(config) {
@@ -84,7 +101,6 @@ function withCleanStaleCxxCache(config) {
 
     const cleanCxxBlock = `
 // Clean stale .cxx directories that may cache incorrect minSdkVersion
-// This prevents the CXX1214 error with hermestooling
 task cleanStaleCxxCache {
     doLast {
         def modulesDir = new File(rootDir, "../node_modules")
@@ -103,7 +119,6 @@ task cleanStaleCxxCache {
 preBuild.dependsOn cleanStaleCxxCache
 `;
 
-    // Only add if not already present
     if (!contents.includes("cleanStaleCxxCache")) {
       contents += cleanCxxBlock;
     }
@@ -114,10 +129,12 @@ preBuild.dependsOn cleanStaleCxxCache
 }
 
 /**
- * Main plugin that combines all minSdkVersion fixes
+ * Main plugin that combines all minSdkVersion fixes.
+ * Applied at every level to ensure no override can sneak in.
  */
 function withMinSdkVersion(config) {
   config = withMinSdkGradleProperties(config);
+  config = withMinSdkSettingsGradle(config);
   config = withMinSdkRootBuildGradle(config);
   config = withCleanStaleCxxCache(config);
   return config;

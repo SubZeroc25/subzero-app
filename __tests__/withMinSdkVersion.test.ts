@@ -10,6 +10,8 @@ import { describe, it, expect } from "vitest";
 // Helper functions that replicate the plugin's transformation logic
 // (extracted from plugins/withMinSdkVersion.js)
 
+const MIN_SDK_VERSION = 24;
+
 function transformGradleProperties(modResults: any[]) {
   const filtered = modResults.filter(
     (p: any) => !(p.type === "property" && p.key === "android.minSdkVersion")
@@ -17,19 +19,28 @@ function transformGradleProperties(modResults: any[]) {
   filtered.push({
     type: "property",
     key: "android.minSdkVersion",
-    value: "24",
+    value: String(MIN_SDK_VERSION),
   });
   return filtered;
 }
 
+function transformSettingsGradle(contents: string) {
+  if (contents.includes("expoAutolinking.useExpoVersionCatalog()")) {
+    contents = contents.replace(
+      "expoAutolinking.useExpoVersionCatalog()",
+      `expoAutolinking.useExpoVersionCatalog { catalog ->
+    catalog.version("minSdk", "${MIN_SDK_VERSION}")
+}`
+    );
+  }
+  return contents;
+}
+
 function transformProjectBuildGradle(contents: string) {
-  const forceMinSdkBlock = `
-// Force minSdkVersion to 24 to prevent stale NDK cache issues
-// This fixes: "User has minSdkVersion 22 but library was built for 24 [//ReactAndroid/hermestooling]"
-rootProject.ext.set("minSdkVersion", 24)
+  const forceMinSdkBlock = `// Force minSdkVersion to ${MIN_SDK_VERSION} (fixes hermestooling CXX1214 error)
+rootProject.ext.set("minSdkVersion", ${MIN_SDK_VERSION})
 `;
   if (!contents.includes("Force minSdkVersion to")) {
-    // Prepend to the top of the file
     contents = forceMinSdkBlock + contents;
   }
   return contents;
@@ -38,7 +49,6 @@ rootProject.ext.set("minSdkVersion", 24)
 function transformAppBuildGradle(contents: string) {
   const cleanCxxBlock = `
 // Clean stale .cxx directories that may cache incorrect minSdkVersion
-// This prevents the CXX1214 error with hermestooling
 task cleanStaleCxxCache {
     doLast {
         def modulesDir = new File(rootDir, "../node_modules")
@@ -108,6 +118,34 @@ describe("withMinSdkVersion config plugin", () => {
     });
   });
 
+  describe("settings.gradle transformation", () => {
+    it("should replace useExpoVersionCatalog() with version override", () => {
+      const input = `expoAutolinking.useExpoModules()
+rootProject.name = 'SubZero'
+expoAutolinking.useExpoVersionCatalog()
+include ':app'`;
+      const result = transformSettingsGradle(input);
+
+      expect(result).toContain('catalog.version("minSdk", "24")');
+      expect(result).not.toContain(
+        "expoAutolinking.useExpoVersionCatalog()"
+      );
+      // Should still have the other lines
+      expect(result).toContain("include ':app'");
+      expect(result).toContain("rootProject.name = 'SubZero'");
+    });
+
+    it("should not modify if already overridden", () => {
+      const input = `expoAutolinking.useExpoVersionCatalog { catalog ->
+    catalog.version("minSdk", "24")
+}`;
+      const result = transformSettingsGradle(input);
+
+      // Should not be modified since the plain call is not present
+      expect(result).toBe(input);
+    });
+  });
+
   describe("root build.gradle transformation", () => {
     it("should prepend rootProject.ext.set for minSdkVersion", () => {
       const input = `apply plugin: "expo-root-project"`;
@@ -129,7 +167,7 @@ describe("withMinSdkVersion config plugin", () => {
     });
 
     it("should not duplicate force block", () => {
-      const input = `// Force minSdkVersion to 24 to prevent stale NDK cache issues
+      const input = `// Force minSdkVersion to 24 (fixes hermestooling CXX1214 error)
 rootProject.ext.set("minSdkVersion", 24)
 apply plugin: "expo-root-project"`;
       const result = transformProjectBuildGradle(input);
@@ -161,7 +199,7 @@ preBuild.dependsOn cleanStaleCxxCache`;
   });
 
   describe("plugin file structure", () => {
-    it("should export correctly and NOT contain afterEvaluate", async () => {
+    it("should export correctly and contain all required modifications", async () => {
       const fs = await import("fs");
       const path = await import("path");
       const pluginPath = path.resolve(
@@ -174,8 +212,10 @@ preBuild.dependsOn cleanStaleCxxCache`;
       expect(pluginContent).toContain("withGradleProperties");
       expect(pluginContent).toContain("withProjectBuildGradle");
       expect(pluginContent).toContain("withAppBuildGradle");
+      expect(pluginContent).toContain("withSettingsGradle");
       expect(pluginContent).toContain("MIN_SDK_VERSION = 24");
       expect(pluginContent).toContain('rootProject.ext.set("minSdkVersion"');
+      expect(pluginContent).toContain('catalog.version("minSdk"');
       // CRITICAL: must NOT contain afterEvaluate
       expect(pluginContent).not.toContain("afterEvaluate");
     });

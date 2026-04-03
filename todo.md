@@ -233,3 +233,10 @@
 ## Phase 19: Fix afterEvaluate Crash in APK Build
 
 - [x] Fix withMinSdkVersion plugin: replaced afterEvaluate block (which crashes in EAS builds) with rootProject.ext.set() prepended to top of build.gradle
+
+## Phase 20: Fix Persistent minSdkVersion 22 Error (Version Catalog Override)
+
+- [x] Root cause: build environment may pass -Pandroid.minSdkVersion=22 which overrides gradle.properties
+- [x] Fix: Added withSettingsGradle to replace useExpoVersionCatalog() with version that forces catalog.version("minSdk", "24")
+- [x] This ensures the version catalog always has minSdk=24 regardless of any -P gradle property overrides
+- [x] Fix applied at ALL 4 levels: gradle.properties, settings.gradle (version catalog), build.gradle (rootProject.ext), app/build.gradle (clean .cxx cache)
