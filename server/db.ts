@@ -7,6 +7,7 @@ import {
   InsertScanJob, scanJobs,
   InsertEmailToken, emailTokens,
   InsertPromoCode, promoCodes,
+  InsertCancellationRequest, cancellationRequests,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -328,6 +329,42 @@ export async function deactivatePromoCode(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(promoCodes).set({ isActive: false }).where(eq(promoCodes.id, id));
+}
+
+// ── Cancellation Requests ─────────────────────────────
+export async function createCancellationRequest(data: InsertCancellationRequest) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(cancellationRequests).values(data);
+  return result[0].insertId;
+}
+
+export async function getCancellationRequest(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(cancellationRequests).where(eq(cancellationRequests.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getUserCancellationRequests(userId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(cancellationRequests).where(eq(cancellationRequests.userId, userId)).orderBy(desc(cancellationRequests.createdAt));
+}
+
+export async function getCancellationRequestForSubscription(userId: number, subscriptionId: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(cancellationRequests).where(
+    and(eq(cancellationRequests.userId, userId), eq(cancellationRequests.subscriptionId, subscriptionId))
+  ).orderBy(desc(cancellationRequests.createdAt)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function updateCancellationRequest(id: number, data: Partial<InsertCancellationRequest>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(cancellationRequests).set(data).where(eq(cancellationRequests.id, id));
 }
 
 // ── Analytics (with discount support) ────────────────

@@ -29,6 +29,13 @@
       "when": 1775209511915,
       "tag": "0003_workable_lily_hollister",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1775213337420,
+      "tag": "0004_lethal_stone_men",
+      "breakpoints": true
     }
   ]
 }

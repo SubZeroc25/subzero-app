@@ -40,6 +40,18 @@ const MAPPING = {
   "doc.text.fill": "description",
   "eye.slash.fill": "visibility-off",
   "eye.fill": "visibility",
+  // Cancellation feature
+  "pause.fill": "pause",
+  "exclamationmark.triangle.fill": "warning",
+  "paperplane.circle.fill": "send",
+  "chevron.up": "expand-less",
+  "chevron.down": "expand-more",
+  "phone.fill": "phone",
+  "clock.fill": "schedule",
+  "checkmark.circle.fill": "check-circle",
+  "xmark.circle.fill": "cancel",
+  "pencil": "edit",
+  "doc.on.doc.fill": "content-copy",
 } as IconMapping;
 
 export function IconSymbol({

@@ -215,6 +215,34 @@ export function SubscriptionCard({
               </Text>
             </View>
           )}
+          {/* Cancel For Me Button - only for active subscriptions */}
+          {item.status === "active" && (
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push({ pathname: "/cancel-subscription", params: { id: String(item.id) } });
+              }}
+              style={({ pressed }) => [{
+                marginTop: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                paddingVertical: 10,
+                borderRadius: 10,
+                backgroundColor: colors.error + "12",
+                borderWidth: 1,
+                borderColor: colors.error + "25",
+                opacity: pressed ? 0.7 : 1,
+                transform: [{ scale: pressed ? 0.98 : 1 }],
+              }]}
+            >
+              <IconSymbol name="bolt.fill" size={14} color={colors.error} />
+              <Text className="text-xs font-semibold" style={{ color: colors.error }}>
+                Cancel For Me
+              </Text>
+            </Pressable>
+          )}
         </View>
       </Pressable>
     </Swipeable>

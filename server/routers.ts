@@ -7,6 +7,12 @@ import * as db from "./db";
 import { extractSubscriptionsFromBatch } from "./ai-extraction";
 import { scanEmailsForSubscriptions } from "./email-scanner";
 import { refreshAccessToken } from "./email-providers";
+import {
+  getProviderContact,
+  generateCancellationEmail,
+  sendCancellationViaGmail,
+  sendCancellationViaOutlook,
+} from "./cancellation-service";
 
 export const appRouter = router({
   system: systemRouter,
@@ -250,6 +256,188 @@ export const appRouter = router({
     history: protectedProcedure.query(async ({ ctx }) => {
       return db.getUserScanJobs(ctx.user.id);
     }),
+  }),
+
+  cancellation: router({
+    // Get provider contact info for a subscription
+    getProviderInfo: protectedProcedure
+      .input(z.object({
+        subscriptionId: z.number(),
+      }))
+      .query(async ({ ctx, input }) => {
+        const subs = await db.getUserSubscriptions(ctx.user.id);
+        const sub = subs.find((s) => s.id === input.subscriptionId);
+        if (!sub) throw new Error("Subscription not found");
+
+        const contact = getProviderContact(sub.name, sub.provider);
+        const existingRequest = await db.getCancellationRequestForSubscription(ctx.user.id, input.subscriptionId);
+
+        return {
+          subscription: { id: sub.id, name: sub.name, provider: sub.provider, amount: sub.amount, billingCycle: sub.billingCycle },
+          providerContact: contact,
+          existingRequest: existingRequest ? {
+            id: existingRequest.id,
+            status: existingRequest.status,
+            followUpCount: existingRequest.followUpCount,
+            lastSentAt: existingRequest.lastSentAt,
+            emailSubject: existingRequest.emailSubject,
+            emailBody: existingRequest.emailBody,
+          } : null,
+        };
+      }),
+
+    // Preview the cancellation email before sending
+    previewEmail: protectedProcedure
+      .input(z.object({
+        subscriptionId: z.number(),
+        customProviderEmail: z.string().email().optional(),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const subs = await db.getUserSubscriptions(ctx.user.id);
+        const sub = subs.find((s) => s.id === input.subscriptionId);
+        if (!sub) throw new Error("Subscription not found");
+
+        const existingRequest = await db.getCancellationRequestForSubscription(ctx.user.id, input.subscriptionId);
+        const isFollowUp = !!existingRequest && ["email_sent", "follow_up_sent"].includes(existingRequest.status);
+
+        const contact = getProviderContact(sub.name, sub.provider);
+        const providerEmail = input.customProviderEmail || contact?.email;
+        if (!providerEmail) throw new Error("No provider email found. Please enter the provider's support email address.");
+
+        const email = await generateCancellationEmail({
+          userName: ctx.user.name || "Account Holder",
+          userEmail: ctx.user.email || "",
+          subscriptionName: sub.name,
+          providerName: sub.provider,
+          amount: Number(sub.amount),
+          billingCycle: sub.billingCycle,
+          isFollowUp,
+          followUpCount: existingRequest?.followUpCount ?? 0,
+        });
+
+        return {
+          subject: email.subject,
+          body: email.body,
+          providerEmail,
+          isFollowUp,
+        };
+      }),
+
+    // Send the cancellation email
+    sendEmail: protectedProcedure
+      .input(z.object({
+        subscriptionId: z.number(),
+        providerEmail: z.string().email(),
+        subject: z.string().min(1),
+        body: z.string().min(1),
+        emailProvider: z.enum(["gmail", "outlook"]),
+      }))
+      .mutation(async ({ ctx, input }) => {
+        const subs = await db.getUserSubscriptions(ctx.user.id);
+        const sub = subs.find((s) => s.id === input.subscriptionId);
+        if (!sub) throw new Error("Subscription not found");
+
+        // Check Pro plan
+        const profile = await db.getOrCreateProfile(ctx.user.id);
+        if (profile?.plan !== "pro") {
+          throw new Error("Cancel For Me is a Pro feature. Upgrade to Pro to send cancellation emails.");
+        }
+
+        // Get email token
+        const emailToken = await db.getEmailToken(ctx.user.id, input.emailProvider);
+        if (!emailToken) {
+          throw new Error(`Please connect your ${input.emailProvider === "gmail" ? "Gmail" : "Outlook"} account first to send cancellation emails.`);
+        }
+
+        // Refresh token if needed
+        let accessToken = emailToken.accessToken;
+        if (emailToken.expiresAt && new Date(emailToken.expiresAt) < new Date() && emailToken.refreshToken) {
+          try {
+            const refreshed = await refreshAccessToken(input.emailProvider, emailToken.refreshToken);
+            accessToken = refreshed.accessToken;
+            await db.saveEmailToken({
+              userId: ctx.user.id,
+              provider: input.emailProvider,
+              accessToken: refreshed.accessToken,
+              refreshToken: emailToken.refreshToken,
+              expiresAt: refreshed.expiresIn ? new Date(Date.now() + refreshed.expiresIn * 1000) : null,
+              email: emailToken.email,
+            });
+          } catch (err) {
+            throw new Error("Failed to refresh email token. Please reconnect your email account.");
+          }
+        }
+
+        // Send the email
+        let sendResult;
+        if (input.emailProvider === "gmail") {
+          sendResult = await sendCancellationViaGmail(
+            accessToken,
+            emailToken.email || ctx.user.email || "",
+            input.providerEmail,
+            input.subject,
+            input.body
+          );
+        } else {
+          sendResult = await sendCancellationViaOutlook(
+            accessToken,
+            input.providerEmail,
+            input.subject,
+            input.body
+          );
+        }
+
+        if (!sendResult.success) {
+          throw new Error(sendResult.error || "Failed to send cancellation email");
+        }
+
+        // Track the cancellation request
+        const existingRequest = await db.getCancellationRequestForSubscription(ctx.user.id, input.subscriptionId);
+        if (existingRequest && ["email_sent", "follow_up_sent"].includes(existingRequest.status)) {
+          // Follow-up
+          await db.updateCancellationRequest(existingRequest.id, {
+            status: "follow_up_sent",
+            followUpCount: existingRequest.followUpCount + 1,
+            lastSentAt: new Date(),
+            emailSubject: input.subject,
+            emailBody: input.body,
+          });
+        } else {
+          // New request
+          await db.createCancellationRequest({
+            userId: ctx.user.id,
+            subscriptionId: input.subscriptionId,
+            providerEmail: input.providerEmail,
+            status: "email_sent",
+            emailSubject: input.subject,
+            emailBody: input.body,
+            lastSentAt: new Date(),
+          });
+        }
+
+        // Update subscription status to cancelled
+        await db.updateSubscription(input.subscriptionId, ctx.user.id, { status: "cancelled" });
+
+        return { success: true, message: "Cancellation email sent successfully!" };
+      }),
+
+    // Get all cancellation requests for the user
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return db.getUserCancellationRequests(ctx.user.id);
+    }),
+
+    // Mark a cancellation as confirmed (provider responded)
+    markConfirmed: protectedProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const request = await db.getCancellationRequest(input.id);
+        if (!request || request.userId !== ctx.user.id) throw new Error("Cancellation request not found");
+        await db.updateCancellationRequest(input.id, {
+          status: "confirmed",
+          confirmedAt: new Date(),
+        });
+        return { success: true };
+      }),
   }),
 
   analytics: router({

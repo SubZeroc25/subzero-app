@@ -57,6 +57,7 @@ export function getGmailConfig(): OAuthConfig {
     redirectUri: `${getApiUrl()}/api/oauth/gmail/callback`,
     scopes: [
       "https://www.googleapis.com/auth/gmail.readonly",
+      "https://www.googleapis.com/auth/gmail.send",
       "https://www.googleapis.com/auth/userinfo.email",
       "https://www.googleapis.com/auth/userinfo.profile",
     ],
@@ -77,6 +78,7 @@ export function getOutlookConfig(): OAuthConfig {
     redirectUri: `${getApiUrl()}/api/oauth/outlook/callback`,
     scopes: [
       "Mail.Read",
+      "Mail.Send",
       "User.Read",
       "offline_access",
     ],

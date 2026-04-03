@@ -104,5 +104,23 @@ export type ScanJob = typeof scanJobs.$inferSelect;
 export type InsertScanJob = typeof scanJobs.$inferInsert;
 export type EmailToken = typeof emailTokens.$inferSelect;
 export type InsertEmailToken = typeof emailTokens.$inferInsert;
+export const cancellationRequests = mysqlTable("cancellation_requests", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  subscriptionId: int("subscriptionId").notNull(),
+  providerEmail: varchar("providerEmail", { length: 320 }).notNull(),
+  status: mysqlEnum("status", ["pending", "email_sent", "follow_up_sent", "confirmed", "failed"]).default("pending").notNull(),
+  emailSubject: varchar("emailSubject", { length: 500 }),
+  emailBody: text("emailBody"),
+  followUpCount: int("followUpCount").default(0).notNull(),
+  lastSentAt: timestamp("lastSentAt"),
+  confirmedAt: timestamp("confirmedAt"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
 export type PromoCode = typeof promoCodes.$inferSelect;
 export type InsertPromoCode = typeof promoCodes.$inferInsert;
+export type CancellationRequest = typeof cancellationRequests.$inferSelect;
+export type InsertCancellationRequest = typeof cancellationRequests.$inferInsert;

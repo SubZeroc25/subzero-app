@@ -473,6 +473,33 @@ export default function EditSubscriptionScreen() {
             </View>
           )}
 
+          {/* Cancel For Me Button (only in edit mode for active subs) */}
+          {!isNewMode && subscriptionId && status === "active" && (
+            <Pressable
+              onPress={() => {
+                if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                router.push({ pathname: "/cancel-subscription", params: { id: String(subscriptionId) } });
+              }}
+              disabled={isSaving}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.error,
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 8,
+                  opacity: pressed ? 0.8 : isSaving ? 0.5 : 1,
+                  marginTop: 8,
+                },
+              ]}
+            >
+              <IconSymbol name="bolt.fill" size={16} color="#FFFFFF" />
+              <Text className="text-white text-base font-semibold">Cancel For Me</Text>
+            </Pressable>
+          )}
+
           {/* Delete Button (only in edit mode) */}
           {!isNewMode && subscriptionId && (
             <Pressable
