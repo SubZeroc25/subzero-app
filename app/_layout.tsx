@@ -88,6 +88,7 @@ export default function RootLayout() {
               <Stack.Screen name="pricing" options={{ presentation: "modal" }} />
               <Stack.Screen name="scan" options={{ presentation: "modal", gestureEnabled: false }} />
               <Stack.Screen name="edit-subscription" options={{ presentation: "modal" }} />
+              <Stack.Screen name="admin" options={{ presentation: "modal" }} />
             </Stack>
             <StatusBar style="auto" />
           </AppProvider>

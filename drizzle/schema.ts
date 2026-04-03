@@ -26,6 +26,8 @@ export const userProfiles = mysqlTable("user_profiles", {
   stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
   stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
   stripeCurrentPeriodEnd: timestamp("stripeCurrentPeriodEnd"),
+  proGrantedBy: mysqlEnum("proGrantedBy", ["stripe", "admin", "promo"]),
+  proGrantedAt: timestamp("proGrantedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -46,6 +48,11 @@ export const subscriptions = mysqlTable("subscriptions", {
   nextRenewalDate: timestamp("nextRenewalDate"),
   detectedFrom: varchar("detectedFrom", { length: 32 }).default("manual").notNull(),
   logoUrl: text("logoUrl"),
+  // Discount fields
+  discountPercent: int("discountPercent"),
+  discountAmount: decimal("discountAmount", { precision: 10, scale: 2 }),
+  discountNote: varchar("discountNote", { length: 255 }),
+  discountExpiresAt: timestamp("discountExpiresAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -73,6 +80,20 @@ export const emailTokens = mysqlTable("email_tokens", {
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
+export const promoCodes = mysqlTable("promo_codes", {
+  id: int("id").autoincrement().primaryKey(),
+  code: varchar("code", { length: 64 }).notNull().unique(),
+  description: varchar("description", { length: 255 }),
+  type: mysqlEnum("type", ["pro_upgrade", "discount"]).default("pro_upgrade").notNull(),
+  discountPercent: int("discountPercent"),
+  maxUses: int("maxUses").default(1).notNull(),
+  usedCount: int("usedCount").default(0).notNull(),
+  isActive: boolean("isActive").default(true).notNull(),
+  expiresAt: timestamp("expiresAt"),
+  createdBy: int("createdBy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 export type UserProfile = typeof userProfiles.$inferSelect;
@@ -83,3 +104,5 @@ export type ScanJob = typeof scanJobs.$inferSelect;
 export type InsertScanJob = typeof scanJobs.$inferInsert;
 export type EmailToken = typeof emailTokens.$inferSelect;
 export type InsertEmailToken = typeof emailTokens.$inferInsert;
+export type PromoCode = typeof promoCodes.$inferSelect;
+export type InsertPromoCode = typeof promoCodes.$inferInsert;

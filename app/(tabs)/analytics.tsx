@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, Platform, ActivityIndicator } from "react-native";
+import { ScrollView, Text, View, Pressable, Platform, ActivityIndicator, RefreshControl } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -6,6 +6,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
+import { useState, useCallback, useMemo } from "react";
 
 const CATEGORY_COLORS: Record<string, string> = {
   entertainment: "#EF4444",
@@ -21,24 +22,57 @@ const CATEGORY_COLORS: Record<string, string> = {
   other: "#9CA3AF",
 };
 
+const CATEGORY_ICONS: Record<string, string> = {
+  entertainment: "play.fill",
+  productivity: "hammer.fill",
+  cloud: "cloud.fill",
+  finance: "chart.bar.fill",
+  health: "heart.fill",
+  education: "book.fill",
+  shopping: "cart.fill",
+  news: "newspaper.fill",
+  social: "person.2.fill",
+  utilities: "gear",
+  other: "ellipsis",
+};
+
 export default function AnalyticsScreen() {
   const router = useRouter();
   const colors = useColors();
   const { isAuthenticated } = useAuth();
+  const [refreshing, setRefreshing] = useState(false);
 
   const analyticsQuery = trpc.analytics.spending.useQuery(undefined, { enabled: isAuthenticated });
   const profileQuery = trpc.profile.get.useQuery(undefined, { enabled: isAuthenticated });
+  const activeQuery = trpc.subscriptions.active.useQuery(undefined, { enabled: isAuthenticated });
 
   const analytics = analyticsQuery.data;
   const isPro = profileQuery.data?.plan === "pro";
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await Promise.all([analyticsQuery.refetch(), profileQuery.refetch(), activeQuery.refetch()]);
+    setRefreshing(false);
+  }, []);
+
+  // Compute discount savings
+  const discountSavings = useMemo(() => {
+    const subs = activeQuery.data ?? [];
+    const withDiscounts = subs.filter((s) => s.discountAmount && Number(s.discountAmount) > 0);
+    const totalSaved = withDiscounts.reduce((acc, s) => acc + Number(s.discountAmount || 0), 0);
+    return { count: withDiscounts.length, total: totalSaved };
+  }, [activeQuery.data]);
 
   if (!isAuthenticated) {
     return (
       <ScreenContainer className="px-6">
         <View className="flex-1 items-center justify-center">
-          <IconSymbol name="lock.fill" size={48} color={colors.muted} />
-          <Text className="text-lg font-semibold text-foreground mt-4">Sign in Required</Text>
-          <Text className="text-sm text-muted text-center mt-2">Sign in to view analytics</Text>
+          <View className="w-16 h-16 rounded-2xl items-center justify-center mb-4" style={{ backgroundColor: colors.muted + "15" }}>
+            <IconSymbol name="lock.fill" size={32} color={colors.muted} />
+          </View>
+          <Text className="text-lg font-semibold text-foreground mt-2">Sign in Required</Text>
+          <Text className="text-sm text-muted text-center mt-2">Sign in to view your analytics</Text>
         </View>
       </ScreenContainer>
     );
@@ -49,6 +83,7 @@ export default function AnalyticsScreen() {
       <ScreenContainer>
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text className="text-sm text-muted mt-3">Loading analytics...</Text>
         </View>
       </ScreenContainer>
     );
@@ -56,106 +91,136 @@ export default function AnalyticsScreen() {
 
   return (
     <ScreenContainer className="px-5">
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+        }
+      >
         {/* Header */}
-        <View className="pt-4 mb-6">
+        <View className="pt-4 mb-5">
           <Text className="text-2xl font-bold text-foreground">Analytics</Text>
           <Text className="text-sm text-muted mt-1">Your spending insights</Text>
         </View>
 
-        {/* Spending Cards */}
+        {/* Spending Summary Cards */}
         <View className="flex-row gap-3 mb-4">
-          <View className="flex-1 bg-primary rounded-2xl p-4">
+          <View className="flex-1 bg-primary rounded-2xl p-5">
             <Text className="text-white/70 text-xs font-medium">Monthly</Text>
-            <Text className="text-white text-2xl font-bold mt-1">
+            <Text className="text-white text-3xl font-bold mt-1">
               ${analytics?.totalMonthly?.toFixed(2) ?? "0.00"}
             </Text>
           </View>
-          <View className="flex-1 bg-surface rounded-2xl p-4 border border-border">
+          <View className="flex-1 bg-surface rounded-2xl p-5 border border-border">
             <Text className="text-muted text-xs font-medium">Yearly</Text>
-            <Text className="text-foreground text-2xl font-bold mt-1">
+            <Text className="text-foreground text-3xl font-bold mt-1">
               ${analytics?.totalYearly?.toFixed(2) ?? "0.00"}
             </Text>
           </View>
         </View>
 
+        {/* Discount Savings Card */}
+        {discountSavings.count > 0 && (
+          <View className="rounded-2xl p-5 mb-4 border border-border" style={{ backgroundColor: colors.success + "08" }}>
+            <View className="flex-row items-center gap-2 mb-2">
+              <IconSymbol name="tag.fill" size={16} color={colors.success} />
+              <Text className="text-sm font-semibold" style={{ color: colors.success }}>Active Discounts</Text>
+            </View>
+            <View className="flex-row items-baseline gap-1">
+              <Text className="text-3xl font-bold" style={{ color: colors.success }}>
+                ${discountSavings.total.toFixed(2)}
+              </Text>
+              <Text className="text-sm text-muted">/month saved</Text>
+            </View>
+            <Text className="text-xs text-muted mt-1">
+              Across {discountSavings.count} subscription{discountSavings.count > 1 ? "s" : ""} with discounts
+            </Text>
+          </View>
+        )}
+
         {/* Category Breakdown */}
         <View className="bg-surface rounded-2xl p-5 border border-border mb-4">
           <Text className="text-base font-semibold text-foreground mb-4">Category Breakdown</Text>
           {!analytics?.categoryBreakdown?.length ? (
-            <Text className="text-sm text-muted text-center py-4">
-              No data yet. Scan your inbox to see category breakdown.
-            </Text>
+            <View className="py-6 items-center">
+              <View className="w-12 h-12 rounded-2xl items-center justify-center mb-3" style={{ backgroundColor: colors.primary + "10" }}>
+                <IconSymbol name="chart.bar.fill" size={24} color={colors.primary} />
+              </View>
+              <Text className="text-sm text-muted text-center">
+                Scan your inbox to see category breakdown
+              </Text>
+            </View>
           ) : (
             <>
-              {/* Visual bars */}
-              <View className="gap-3 mb-4">
-                {analytics.categoryBreakdown.map((cat, i) => {
-                  const maxAmount = Math.max(...analytics.categoryBreakdown.map((c) => c.amount), 1);
-                  const width = Math.max((cat.amount / maxAmount) * 100, 5);
-                  const catColor = CATEGORY_COLORS[cat.category] || CATEGORY_COLORS.other;
-                  return (
-                    <View key={i}>
-                      <View className="flex-row items-center justify-between mb-1">
-                        <View className="flex-row items-center gap-2">
-                          <View className="w-3 h-3 rounded-full" style={{ backgroundColor: catColor }} />
-                          <Text className="text-sm text-foreground capitalize">{cat.category}</Text>
+              {analytics.categoryBreakdown.map((cat, i) => {
+                const maxAmount = Math.max(...analytics.categoryBreakdown.map((c) => c.amount), 1);
+                const width = Math.max((cat.amount / maxAmount) * 100, 8);
+                const catColor = CATEGORY_COLORS[cat.category] || CATEGORY_COLORS.other;
+                const totalMonthly = analytics.totalMonthly || 1;
+                const pct = ((cat.amount / totalMonthly) * 100).toFixed(0);
+                return (
+                  <View key={i} className="mb-4">
+                    <View className="flex-row items-center justify-between mb-1.5">
+                      <View className="flex-row items-center gap-2">
+                        <View className="w-7 h-7 rounded-lg items-center justify-center" style={{ backgroundColor: catColor + "15" }}>
+                          <IconSymbol name={(CATEGORY_ICONS[cat.category] || "ellipsis") as any} size={14} color={catColor} />
                         </View>
-                        <Text className="text-sm font-medium text-foreground">
-                          ${cat.amount.toFixed(2)}/mo
-                        </Text>
+                        <Text className="text-sm font-medium text-foreground capitalize">{cat.category}</Text>
+                        <Text className="text-xs text-muted">({cat.count})</Text>
                       </View>
-                      <View className="h-2 bg-border rounded-full overflow-hidden">
-                        <View
-                          className="h-full rounded-full"
-                          style={{ width: `${width}%`, backgroundColor: catColor }}
-                        />
+                      <View className="flex-row items-center gap-2">
+                        <Text className="text-sm font-semibold text-foreground">
+                          ${cat.amount.toFixed(2)}
+                        </Text>
+                        <Text className="text-xs text-muted">{pct}%</Text>
                       </View>
                     </View>
-                  );
-                })}
-              </View>
-              {/* Legend */}
-              <View className="flex-row flex-wrap gap-x-4 gap-y-2 pt-3 border-t border-border">
-                {analytics.categoryBreakdown.map((cat, i) => (
-                  <View key={i} className="flex-row items-center gap-1.5">
-                    <View
-                      className="w-2.5 h-2.5 rounded-full"
-                      style={{ backgroundColor: CATEGORY_COLORS[cat.category] || CATEGORY_COLORS.other }}
-                    />
-                    <Text className="text-xs text-muted capitalize">
-                      {cat.category} ({cat.count})
-                    </Text>
+                    <View className="h-2.5 bg-border rounded-full overflow-hidden">
+                      <View
+                        className="h-full rounded-full"
+                        style={{ width: `${width}%`, backgroundColor: catColor }}
+                      />
+                    </View>
                   </View>
-                ))}
-              </View>
+                );
+              })}
             </>
           )}
         </View>
 
         {/* Monthly Trend */}
         <View className="bg-surface rounded-2xl p-5 border border-border mb-4">
-          <Text className="text-base font-semibold text-foreground mb-4">Monthly Trend</Text>
+          <View className="flex-row items-center justify-between mb-4">
+            <Text className="text-base font-semibold text-foreground">Monthly Trend</Text>
+            {analytics?.monthlyTrend && analytics.monthlyTrend.length > 0 && (
+              <Text className="text-xs text-muted">Last {analytics.monthlyTrend.length} months</Text>
+            )}
+          </View>
           {!analytics?.monthlyTrend?.length ? (
-            <Text className="text-sm text-muted text-center py-4">No trend data available</Text>
+            <View className="py-6 items-center">
+              <Text className="text-sm text-muted">No trend data available yet</Text>
+            </View>
           ) : (
-            <View className="flex-row items-end justify-between h-32">
+            <View className="flex-row items-end justify-between" style={{ height: 120 }}>
               {analytics.monthlyTrend.map((m, i) => {
                 const maxAmount = Math.max(...analytics.monthlyTrend.map((t) => t.amount), 1);
-                const height = Math.max((m.amount / maxAmount) * 100, 4);
+                const height = Math.max((m.amount / maxAmount) * 90, 6);
                 const isLast = i === analytics.monthlyTrend.length - 1;
                 return (
                   <View key={i} className="items-center flex-1 gap-1">
-                    <Text className="text-[9px] text-muted">${m.amount.toFixed(0)}</Text>
+                    <Text className="text-[8px] text-muted">
+                      {m.amount > 0 ? `$${m.amount.toFixed(0)}` : ""}
+                    </Text>
                     <View
                       style={{
                         height,
-                        backgroundColor: isLast ? colors.primary : colors.primary + "40",
-                        borderRadius: 4,
-                        width: "55%",
+                        backgroundColor: isLast ? colors.primary : colors.primary + "30",
+                        borderRadius: 6,
+                        width: "50%",
                       }}
                     />
-                    <Text className="text-[10px] text-muted">{m.month}</Text>
+                    <Text className="text-[10px] text-muted font-medium">{m.month}</Text>
                   </View>
                 );
               })}
@@ -167,7 +232,9 @@ export default function AnalyticsScreen() {
         <View className="bg-surface rounded-2xl p-5 border border-border mb-4">
           <Text className="text-base font-semibold text-foreground mb-4">Top Subscriptions</Text>
           {!analytics?.topSubscriptions?.length ? (
-            <Text className="text-sm text-muted text-center py-4">No subscriptions found</Text>
+            <View className="py-6 items-center">
+              <Text className="text-sm text-muted">No subscriptions found</Text>
+            </View>
           ) : (
             analytics.topSubscriptions.map((sub, i) => (
               <View
@@ -180,7 +247,7 @@ export default function AnalyticsScreen() {
                 }
               >
                 <View className="flex-row items-center gap-3">
-                  <View className="w-8 h-8 rounded-lg bg-primary/10 items-center justify-center">
+                  <View className="w-8 h-8 rounded-lg items-center justify-center" style={{ backgroundColor: colors.primary + "10" }}>
                     <Text className="text-sm font-bold text-primary">{i + 1}</Text>
                   </View>
                   <View>
@@ -194,28 +261,38 @@ export default function AnalyticsScreen() {
           )}
         </View>
 
-        {/* Potential Savings (Pro Feature) */}
+        {/* Potential Savings */}
         <View className="bg-surface rounded-2xl p-5 border border-border mb-4">
           <View className="flex-row items-center justify-between mb-3">
             <Text className="text-base font-semibold text-foreground">Potential Savings</Text>
             {!isPro && (
-              <View className="bg-primary/10 px-2 py-0.5 rounded-full flex-row items-center gap-1">
+              <View className="bg-primary/10 px-2.5 py-1 rounded-full flex-row items-center gap-1">
                 <IconSymbol name="lock.fill" size={10} color={colors.primary} />
-                <Text className="text-[10px] font-semibold text-primary">PRO</Text>
+                <Text className="text-[10px] font-bold text-primary">PRO</Text>
               </View>
             )}
           </View>
           {isPro ? (
             <View className="items-center py-4">
-              <Text className="text-3xl font-bold text-success">
+              <Text className="text-4xl font-bold text-success">
                 ${analytics?.potentialSavings?.toFixed(2) ?? "0.00"}
               </Text>
               <Text className="text-sm text-muted mt-1">estimated monthly savings</Text>
+              {discountSavings.total > 0 && (
+                <View className="flex-row items-center gap-1.5 mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: colors.success + "10" }}>
+                  <IconSymbol name="tag.fill" size={12} color={colors.success} />
+                  <Text className="text-xs font-medium" style={{ color: colors.success }}>
+                    Already saving ${discountSavings.total.toFixed(2)}/mo with discounts
+                  </Text>
+                </View>
+              )}
             </View>
           ) : (
             <View className="items-center py-4">
-              <IconSymbol name="crown.fill" size={32} color={colors.primary} />
-              <Text className="text-sm text-muted text-center mt-2">
+              <View className="w-14 h-14 rounded-2xl bg-primary/10 items-center justify-center mb-3">
+                <IconSymbol name="crown.fill" size={28} color={colors.primary} />
+              </View>
+              <Text className="text-sm text-muted text-center">
                 Upgrade to Pro to see personalized savings insights
               </Text>
               <Pressable
@@ -226,11 +303,12 @@ export default function AnalyticsScreen() {
                 style={({ pressed }) => [
                   {
                     backgroundColor: colors.primary,
-                    paddingHorizontal: 20,
-                    paddingVertical: 10,
-                    borderRadius: 10,
+                    paddingHorizontal: 24,
+                    paddingVertical: 12,
+                    borderRadius: 12,
                     marginTop: 12,
                     opacity: pressed ? 0.9 : 1,
+                    transform: [{ scale: pressed ? 0.98 : 1 }],
                   },
                 ]}
               >
@@ -240,7 +318,7 @@ export default function AnalyticsScreen() {
           )}
         </View>
 
-        {/* Export (Pro Feature) */}
+        {/* Export Button */}
         <Pressable
           onPress={() => {
             if (!isPro) {
@@ -256,10 +334,10 @@ export default function AnalyticsScreen() {
           }}
           style={({ pressed }) => [
             {
-              backgroundColor: colors.surface,
+              backgroundColor: isPro ? colors.primary + "10" : colors.surface,
               borderWidth: 1,
-              borderColor: colors.border,
-              paddingVertical: 14,
+              borderColor: isPro ? colors.primary + "30" : colors.border,
+              paddingVertical: 16,
               borderRadius: 14,
               flexDirection: "row",
               alignItems: "center",
@@ -272,7 +350,7 @@ export default function AnalyticsScreen() {
           {!isPro && <IconSymbol name="lock.fill" size={14} color={colors.muted} />}
           <IconSymbol name="doc.text.fill" size={18} color={isPro ? colors.primary : colors.muted} />
           <Text
-            className="text-sm font-medium"
+            className="text-sm font-semibold"
             style={{ color: isPro ? colors.primary : colors.muted }}
           >
             Export Report

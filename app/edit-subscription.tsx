@@ -18,6 +18,9 @@ interface FormErrors {
   name?: string;
   amount?: string;
   nextRenewalDate?: string;
+  discountPercent?: string;
+  discountAmount?: string;
+  originalAmount?: string;
 }
 
 function validateName(value: string): string | undefined {
@@ -38,7 +41,7 @@ function validateAmount(value: string): string | undefined {
 }
 
 function validateDate(value: string): string | undefined {
-  if (!value.trim()) return undefined; // Date is optional
+  if (!value.trim()) return undefined;
   const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
   if (!dateRegex.test(value.trim())) return "Use format YYYY-MM-DD";
   const parsed = new Date(value.trim());
@@ -48,54 +51,96 @@ function validateDate(value: string): string | undefined {
   return undefined;
 }
 
+function validatePercent(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  const num = parseFloat(value);
+  if (isNaN(num)) return "Enter a valid number";
+  if (num < 0 || num > 100) return "Must be 0-100";
+  return undefined;
+}
+
+function validateOptionalAmount(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  const num = parseFloat(value);
+  if (isNaN(num)) return "Enter a valid number";
+  if (num < 0) return "Cannot be negative";
+  if (num > 99999.99) return "Must be under $100,000";
+  return undefined;
+}
+
 export default function EditSubscriptionScreen() {
   const router = useRouter();
   const colors = useColors();
   const params = useLocalSearchParams<{ id: string }>();
-  const subscriptionId = params.id ? parseInt(params.id) : null;
+  const isNewMode = params.id === "new";
+  const subscriptionId = isNewMode ? null : (params.id ? parseInt(params.id) : null);
 
   const [name, setName] = useState("");
+  const [provider, setProvider] = useState("");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("other");
   const [billingCycle, setBillingCycle] = useState("monthly");
   const [status, setStatus] = useState("active");
   const [nextRenewalDate, setNextRenewalDate] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
+  const [discountAmount, setDiscountAmount] = useState("");
+  const [discountNote, setDiscountNote] = useState("");
+  const [originalAmount, setOriginalAmount] = useState("");
+  const [showDiscount, setShowDiscount] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  const createMutation = trpc.subscriptions.create.useMutation();
   const updateMutation = trpc.subscriptions.update.useMutation();
   const deleteMutation = trpc.subscriptions.delete.useMutation();
 
-  // Validate all fields
   const currentErrors = useMemo<FormErrors>(() => ({
     name: validateName(name),
     amount: validateAmount(amount),
     nextRenewalDate: validateDate(nextRenewalDate),
-  }), [name, amount, nextRenewalDate]);
+    discountPercent: validatePercent(discountPercent),
+    discountAmount: validateOptionalAmount(discountAmount),
+    originalAmount: validateOptionalAmount(originalAmount),
+  }), [name, amount, nextRenewalDate, discountPercent, discountAmount, originalAmount]);
 
   const isFormValid = useMemo(() => {
-    return !currentErrors.name && !currentErrors.amount && !currentErrors.nextRenewalDate;
+    return !currentErrors.name && !currentErrors.amount && !currentErrors.nextRenewalDate
+      && !currentErrors.discountPercent && !currentErrors.discountAmount && !currentErrors.originalAmount;
   }, [currentErrors]);
 
-  // Show errors only for touched fields
   const visibleErrors = useMemo<FormErrors>(() => ({
     name: touched.name ? currentErrors.name : undefined,
     amount: touched.amount ? currentErrors.amount : undefined,
     nextRenewalDate: touched.nextRenewalDate ? currentErrors.nextRenewalDate : undefined,
+    discountPercent: touched.discountPercent ? currentErrors.discountPercent : undefined,
+    discountAmount: touched.discountAmount ? currentErrors.discountAmount : undefined,
+    originalAmount: touched.originalAmount ? currentErrors.originalAmount : undefined,
   }), [currentErrors, touched]);
 
   const handleBlur = useCallback((field: string) => {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
+  // Auto-calculate discount amount from percent and original amount
+  useEffect(() => {
+    if (discountPercent && originalAmount) {
+      const pct = parseFloat(discountPercent);
+      const orig = parseFloat(originalAmount);
+      if (!isNaN(pct) && !isNaN(orig) && pct > 0 && pct <= 100) {
+        const discounted = orig * (1 - pct / 100);
+        setAmount(discounted.toFixed(2));
+        setDiscountAmount((orig - discounted).toFixed(2));
+      }
+    }
+  }, [discountPercent, originalAmount]);
+
   const handleSave = async () => {
-    // Mark all fields as touched to show all errors
-    setTouched({ name: true, amount: true, nextRenewalDate: true });
+    setTouched({ name: true, amount: true, nextRenewalDate: true, discountPercent: true, discountAmount: true, originalAmount: true });
     setSaveError(null);
 
-    if (!isFormValid || !subscriptionId) {
+    if (!isFormValid) {
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -104,15 +149,30 @@ export default function EditSubscriptionScreen() {
     setIsSaving(true);
 
     try {
-      await updateMutation.mutateAsync({
-        id: subscriptionId,
+      const payload = {
         name: name.trim(),
         amount: parseFloat(amount),
         category: category as any,
         billingCycle: billingCycle as any,
         status: status as any,
         nextRenewalDate: nextRenewalDate.trim() || null,
-      });
+        discountPercent: discountPercent ? parseFloat(discountPercent) : null,
+        discountAmount: discountAmount ? parseFloat(discountAmount) : null,
+        discountNote: discountNote.trim() || null,
+        originalAmount: originalAmount ? parseFloat(originalAmount) : null,
+      };
+
+      if (isNewMode) {
+        await createMutation.mutateAsync({
+          ...payload,
+          provider: provider.trim() || name.trim(),
+        } as any);
+      } else if (subscriptionId) {
+        await updateMutation.mutateAsync({
+          id: subscriptionId,
+          ...payload,
+        } as any);
+      }
 
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.back();
@@ -163,10 +223,11 @@ export default function EditSubscriptionScreen() {
       placeholder?: string;
       keyboardType?: "default" | "decimal-pad";
       error?: string;
+      multiline?: boolean;
     }
   ) => (
-    <View className="mb-5">
-      <Text className="text-sm font-semibold text-foreground mb-2">{label}</Text>
+    <View className="mb-4">
+      <Text className="text-sm font-semibold text-foreground mb-1.5">{label}</Text>
       <TextInput
         value={value}
         onChangeText={(v) => {
@@ -179,19 +240,22 @@ export default function EditSubscriptionScreen() {
         keyboardType={options?.keyboardType || "default"}
         editable={!isSaving}
         returnKeyType="done"
+        multiline={options?.multiline}
+        numberOfLines={options?.multiline ? 2 : 1}
         style={{
           backgroundColor: colors.surface,
           borderWidth: 1,
           borderColor: options?.error ? colors.error : colors.border,
           borderRadius: 10,
           paddingHorizontal: 16,
-          paddingVertical: 14,
+          paddingVertical: 12,
           color: colors.foreground,
           fontSize: 15,
+          ...(options?.multiline ? { minHeight: 60, textAlignVertical: "top" as any } : {}),
         }}
       />
       {options?.error && (
-        <View className="flex-row items-center gap-1 mt-1.5">
+        <View className="flex-row items-center gap-1 mt-1">
           <IconSymbol name="exclamationmark.triangle.fill" size={12} color={colors.error} />
           <Text className="text-xs text-error">{options.error}</Text>
         </View>
@@ -206,8 +270,8 @@ export default function EditSubscriptionScreen() {
     onSelect: (v: string) => void,
     horizontal?: boolean
   ) => (
-    <View className="mb-5">
-      <Text className="text-sm font-semibold text-foreground mb-2">{label}</Text>
+    <View className="mb-4">
+      <Text className="text-sm font-semibold text-foreground mb-1.5">{label}</Text>
       {horizontal ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <View className="flex-row gap-2">
@@ -281,7 +345,9 @@ export default function EditSubscriptionScreen() {
       <View className="flex-1 px-6">
         {/* Header */}
         <View className="flex-row items-center justify-between pt-4 pb-4">
-          <Text className="text-2xl font-bold text-foreground">Edit Subscription</Text>
+          <Text className="text-2xl font-bold text-foreground">
+            {isNewMode ? "Add Subscription" : "Edit Subscription"}
+          </Text>
           <Pressable
             onPress={() => router.back()}
             style={({ pressed }) => [{ opacity: pressed ? 0.5 : 1, padding: 8 }]}
@@ -310,8 +376,12 @@ export default function EditSubscriptionScreen() {
         {/* Form */}
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
           {renderField("Service Name", name, setName, "name", {
-            placeholder: "e.g., Netflix",
+            placeholder: "e.g., Netflix, Spotify, iCloud",
             error: visibleErrors.name,
+          })}
+
+          {isNewMode && renderField("Provider", provider, setProvider, "provider", {
+            placeholder: "e.g., Apple, Google (optional)",
           })}
 
           {renderField("Amount ($)", amount, setAmount, "amount", {
@@ -329,23 +399,99 @@ export default function EditSubscriptionScreen() {
             error: visibleErrors.nextRenewalDate,
           })}
 
-          {/* Delete Button */}
+          {/* Discount Section */}
           <Pressable
-            onPress={handleDelete}
-            disabled={isSaving}
+            onPress={() => {
+              setShowDiscount(!showDiscount);
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
             style={({ pressed }) => [
               {
-                backgroundColor: colors.error + "15",
-                paddingVertical: 14,
-                borderRadius: 12,
+                flexDirection: "row",
                 alignItems: "center",
-                opacity: pressed ? 0.8 : isSaving ? 0.5 : 1,
-                marginTop: 8,
+                justifyContent: "space-between",
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                backgroundColor: colors.success + "08",
+                borderRadius: 12,
+                borderWidth: 1,
+                borderColor: colors.success + "20",
+                marginBottom: 16,
+                opacity: pressed ? 0.8 : 1,
               },
             ]}
           >
-            <Text className="text-error text-base font-semibold">Delete Subscription</Text>
+            <View className="flex-row items-center gap-2">
+              <IconSymbol name="tag.fill" size={16} color={colors.success} />
+              <Text className="text-sm font-medium" style={{ color: colors.success }}>
+                {showDiscount ? "Hide Discount Options" : "Add Discount / Coupon"}
+              </Text>
+            </View>
+            <IconSymbol
+              name={showDiscount ? "chevron.up" : "chevron.down"}
+              size={14}
+              color={colors.success}
+            />
           </Pressable>
+
+          {showDiscount && (
+            <View className="mb-4 p-4 rounded-xl border border-border" style={{ backgroundColor: colors.surface }}>
+              <Text className="text-xs text-muted mb-3">
+                Add discount details to track your savings. Enter original price and discount percentage to auto-calculate.
+              </Text>
+
+              {renderField("Original Price ($)", originalAmount, setOriginalAmount, "originalAmount", {
+                placeholder: "Full price before discount",
+                keyboardType: "decimal-pad",
+                error: visibleErrors.originalAmount,
+              })}
+
+              {renderField("Discount (%)", discountPercent, setDiscountPercent, "discountPercent", {
+                placeholder: "e.g., 20",
+                keyboardType: "decimal-pad",
+                error: visibleErrors.discountPercent,
+              })}
+
+              {renderField("Discount Amount ($)", discountAmount, setDiscountAmount, "discountAmount", {
+                placeholder: "Auto-calculated or enter manually",
+                keyboardType: "decimal-pad",
+                error: visibleErrors.discountAmount,
+              })}
+
+              {renderField("Discount Note", discountNote, setDiscountNote, "discountNote", {
+                placeholder: "e.g., Student discount, annual plan savings",
+                multiline: true,
+              })}
+
+              {discountPercent && originalAmount && !currentErrors.discountPercent && !currentErrors.originalAmount && (
+                <View className="p-3 rounded-lg" style={{ backgroundColor: colors.success + "10" }}>
+                  <Text className="text-xs font-medium" style={{ color: colors.success }}>
+                    You save ${discountAmount || "0.00"}/{billingCycle} ({discountPercent}% off ${originalAmount})
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Delete Button (only in edit mode) */}
+          {!isNewMode && subscriptionId && (
+            <Pressable
+              onPress={handleDelete}
+              disabled={isSaving}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.error + "15",
+                  paddingVertical: 14,
+                  borderRadius: 12,
+                  alignItems: "center",
+                  opacity: pressed ? 0.8 : isSaving ? 0.5 : 1,
+                  marginTop: 8,
+                },
+              ]}
+            >
+              <Text className="text-error text-base font-semibold">Delete Subscription</Text>
+            </Pressable>
+          )}
         </ScrollView>
 
         {/* Save Button */}
@@ -369,7 +515,7 @@ export default function EditSubscriptionScreen() {
           >
             {isSaving && <ActivityIndicator size="small" color="#FFFFFF" />}
             <Text className="text-white text-base font-semibold">
-              {isSaving ? "Saving..." : "Save Changes"}
+              {isSaving ? "Saving..." : isNewMode ? "Add Subscription" : "Save Changes"}
             </Text>
           </Pressable>
         </View>

@@ -1,4 +1,4 @@
-import { eq, and, desc, sql, gte } from "drizzle-orm";
+import { eq, and, desc, sql, gte, count } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users,
@@ -6,6 +6,7 @@ import {
   InsertSubscription, subscriptions,
   InsertScanJob, scanJobs,
   InsertEmailToken, emailTokens,
+  InsertPromoCode, promoCodes,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -161,7 +162,6 @@ export async function getScanJob(id: number) {
 export async function saveEmailToken(data: InsertEmailToken) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  // Upsert: if user already has a token for this provider, update it
   const existing = await db.select().from(emailTokens).where(
     and(eq(emailTokens.userId, data.userId), eq(emailTokens.provider, data.provider))
   ).limit(1);
@@ -216,7 +216,121 @@ export async function getProfileByStripeCustomerId(stripeCustomerId: string) {
   return result.length > 0 ? result[0] : null;
 }
 
-// ── Analytics ─────────────────────────────────────────
+// ── Admin ───────────────────────────────────────────
+export async function getAllUsers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(users).orderBy(desc(users.createdAt));
+}
+
+export async function getAllProfiles() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(userProfiles).orderBy(desc(userProfiles.createdAt));
+}
+
+export async function getUserById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getAllSubscriptions() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(subscriptions).orderBy(desc(subscriptions.createdAt));
+}
+
+export async function getSystemStats() {
+  const db = await getDb();
+  if (!db) return null;
+
+  const [userCount] = await db.select({ count: count() }).from(users);
+  const [subCount] = await db.select({ count: count() }).from(subscriptions);
+  const [activeSubCount] = await db.select({ count: count() }).from(subscriptions).where(eq(subscriptions.status, "active"));
+  const [proCount] = await db.select({ count: count() }).from(userProfiles).where(eq(userProfiles.plan, "pro"));
+  const [scanCount] = await db.select({ count: count() }).from(scanJobs);
+  const [promoCount] = await db.select({ count: count() }).from(promoCodes).where(eq(promoCodes.isActive, true));
+
+  // Total monthly revenue tracked across all users
+  const activeSubs = await db.select().from(subscriptions).where(eq(subscriptions.status, "active"));
+  let totalMonthlyTracked = 0;
+  for (const sub of activeSubs) {
+    const amount = Number(sub.amount);
+    const discount = sub.discountPercent ? amount * (sub.discountPercent / 100) : (sub.discountAmount ? Number(sub.discountAmount) : 0);
+    const effectiveAmount = amount - discount;
+    switch (sub.billingCycle) {
+      case "weekly": totalMonthlyTracked += effectiveAmount * 4.33; break;
+      case "monthly": totalMonthlyTracked += effectiveAmount; break;
+      case "quarterly": totalMonthlyTracked += effectiveAmount / 3; break;
+      case "yearly": totalMonthlyTracked += effectiveAmount / 12; break;
+    }
+  }
+
+  return {
+    totalUsers: userCount.count,
+    totalSubscriptions: subCount.count,
+    activeSubscriptions: activeSubCount.count,
+    proUsers: proCount.count,
+    totalScans: scanCount.count,
+    activePromoCodes: promoCount.count,
+    totalMonthlyTracked: Math.round(totalMonthlyTracked * 100) / 100,
+  };
+}
+
+export async function adminSetUserPlan(userId: number, plan: "free" | "pro", grantedBy: "admin" | "promo") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(userProfiles).set({
+    plan,
+    proGrantedBy: plan === "pro" ? grantedBy : null,
+    proGrantedAt: plan === "pro" ? new Date() : null,
+  }).where(eq(userProfiles.userId, userId));
+}
+
+export async function adminSetUserRole(userId: number, role: "user" | "admin") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(users).set({ role }).where(eq(users.id, userId));
+}
+
+// ── Promo Codes ─────────────────────────────────────
+export async function createPromoCode(data: InsertPromoCode) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(promoCodes).values(data);
+  return result[0].insertId;
+}
+
+export async function getPromoCodeByCode(code: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(promoCodes).where(eq(promoCodes.code, code.toUpperCase())).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+export async function getAllPromoCodes() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(promoCodes).orderBy(desc(promoCodes.createdAt));
+}
+
+export async function incrementPromoCodeUsage(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(promoCodes).set({
+    usedCount: sql`${promoCodes.usedCount} + 1`,
+  }).where(eq(promoCodes.id, id));
+}
+
+export async function deactivatePromoCode(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(promoCodes).set({ isActive: false }).where(eq(promoCodes.id, id));
+}
+
+// ── Analytics (with discount support) ────────────────
 export async function getSpendingAnalytics(userId: number) {
   const db = await getDb();
   if (!db) return null;
@@ -225,13 +339,18 @@ export async function getSpendingAnalytics(userId: number) {
   );
 
   let totalMonthly = 0;
+  let totalSavings = 0;
   for (const sub of subs) {
     const amount = Number(sub.amount);
+    const discount = sub.discountPercent ? amount * (sub.discountPercent / 100) : (sub.discountAmount ? Number(sub.discountAmount) : 0);
+    const effectiveAmount = amount - discount;
+    totalSavings += discount;
+
     switch (sub.billingCycle) {
-      case "weekly": totalMonthly += amount * 4.33; break;
-      case "monthly": totalMonthly += amount; break;
-      case "quarterly": totalMonthly += amount / 3; break;
-      case "yearly": totalMonthly += amount / 12; break;
+      case "weekly": totalMonthly += effectiveAmount * 4.33; break;
+      case "monthly": totalMonthly += effectiveAmount; break;
+      case "quarterly": totalMonthly += effectiveAmount / 3; break;
+      case "yearly": totalMonthly += effectiveAmount / 12; break;
       case "one-time": break;
     }
   }
@@ -239,7 +358,10 @@ export async function getSpendingAnalytics(userId: number) {
   const categoryMap = new Map<string, { amount: number; count: number }>();
   for (const sub of subs) {
     const existing = categoryMap.get(sub.category) || { amount: 0, count: 0 };
-    const monthlyAmount = sub.billingCycle === "yearly" ? Number(sub.amount) / 12 : Number(sub.amount);
+    const amount = Number(sub.amount);
+    const discount = sub.discountPercent ? amount * (sub.discountPercent / 100) : (sub.discountAmount ? Number(sub.discountAmount) : 0);
+    const effectiveAmount = amount - discount;
+    const monthlyAmount = sub.billingCycle === "yearly" ? effectiveAmount / 12 : effectiveAmount;
     existing.amount += monthlyAmount;
     existing.count += 1;
     categoryMap.set(sub.category, existing);
@@ -249,28 +371,31 @@ export async function getSpendingAnalytics(userId: number) {
     category, amount: Math.round(data.amount * 100) / 100, count: data.count,
   })).sort((a, b) => b.amount - a.amount);
 
-  // Generate monthly trend (last 6 months, using current total as baseline)
   const months = [];
   for (let i = 5; i >= 0; i--) {
     const d = new Date();
     d.setMonth(d.getMonth() - i);
-    const variance = 1 + (Math.random() - 0.5) * 0.1; // slight variance for realism
+    const variance = 1 + (Math.random() - 0.5) * 0.1;
     months.push({
       month: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
       amount: Math.round(totalMonthly * variance * 100) / 100,
     });
   }
-  // Last month is the actual total
   if (months.length > 0) months[months.length - 1].amount = Math.round(totalMonthly * 100) / 100;
 
   const topSubscriptions = subs
-    .map((s) => ({ name: s.name, amount: Number(s.amount), billingCycle: s.billingCycle }))
+    .map((s) => {
+      const amount = Number(s.amount);
+      const discount = s.discountPercent ? amount * (s.discountPercent / 100) : (s.discountAmount ? Number(s.discountAmount) : 0);
+      return { name: s.name, amount: amount - discount, originalAmount: amount, billingCycle: s.billingCycle, hasDiscount: discount > 0 };
+    })
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 5);
 
   return {
     totalMonthly: Math.round(totalMonthly * 100) / 100,
     totalYearly: Math.round(totalMonthly * 12 * 100) / 100,
+    totalSavings: Math.round(totalSavings * 100) / 100,
     categoryBreakdown,
     monthlyTrend: months,
     topSubscriptions,

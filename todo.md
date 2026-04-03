@@ -88,3 +88,33 @@
 - [x] Fix email provider callback URLs using localhost instead of public URL
 - [x] Fix email-scanner.ts import paths
 - [x] Fix test mocks for new getEmailToken function
+
+## Phase 7: Admin Panel, Discounts, Pro Fix, Polish
+
+### Admin Panel
+- [x] Admin tab/screen with role-based access
+- [x] User management (list users, view details, toggle plan)
+- [x] Subscription oversight (all subscriptions across users)
+- [x] Platform analytics (total users, revenue, scan stats)
+- [x] Admin role check and guard
+
+### Subscription Discounts
+- [x] Discount field on subscriptions (percentage or fixed amount)
+- [x] Discount display on subscription cards
+- [x] Discount input in edit subscription form
+- [x] Discounted price calculation in analytics
+
+### Pro Upgrade Fix
+- [x] Fix Pro upgrade to work without live Stripe
+- [x] In-app Pro activation flow (promo code redemption)
+- [x] Pro plan visual confirmation
+
+### Next-Level Polish
+- [x] Empty state illustrations and messaging
+- [x] Pull-to-refresh on Dashboard and Subscriptions
+- [x] Haptic feedback on key interactions
+- [x] Visual refinements (gradients, shadows, spacing)
+- [x] Manual subscription entry button
+- [ ] Dark mode toggle in Profile
+- [ ] Skeleton loading states
+- [ ] Animated transitions between screens

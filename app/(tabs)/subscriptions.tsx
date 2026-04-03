@@ -1,5 +1,5 @@
 import {
-  Text, View, Pressable, Platform, FlatList, TextInput, ActivityIndicator, Alert,
+  Text, View, Pressable, Platform, FlatList, TextInput, ActivityIndicator, Alert, RefreshControl,
 } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
@@ -19,6 +19,7 @@ export default function SubscriptionsScreen() {
   const { isAuthenticated } = useAuth();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
+  const [refreshing, setRefreshing] = useState(false);
 
   const subsQuery = trpc.subscriptions.list.useQuery(undefined, { enabled: isAuthenticated });
   const deleteMutation = trpc.subscriptions.delete.useMutation({
@@ -27,6 +28,13 @@ export default function SubscriptionsScreen() {
   const updateMutation = trpc.subscriptions.update.useMutation({
     onSuccess: () => subsQuery.refetch(),
   });
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await subsQuery.refetch();
+    setRefreshing(false);
+  }, []);
 
   const filteredSubs = useMemo(() => {
     let list = subsQuery.data ?? [];
@@ -41,6 +49,29 @@ export default function SubscriptionsScreen() {
     }
     return list;
   }, [subsQuery.data, filter, search]);
+
+  // Count by status
+  const statusCounts = useMemo(() => {
+    const all = subsQuery.data ?? [];
+    return {
+      all: all.length,
+      active: all.filter((s) => s.status === "active").length,
+      cancelled: all.filter((s) => s.status === "cancelled").length,
+      trial: all.filter((s) => s.status === "trial").length,
+    };
+  }, [subsQuery.data]);
+
+  // Total monthly spend
+  const totalMonthly = useMemo(() => {
+    const active = (subsQuery.data ?? []).filter((s) => s.status === "active" || s.status === "trial");
+    return active.reduce((sum, s) => {
+      const amt = Number(s.amount) || 0;
+      const discount = Number(s.discountAmount) || 0;
+      const effective = Math.max(amt - discount, 0);
+      if (s.billingCycle === "yearly") return sum + effective / 12;
+      return sum + effective;
+    }, 0);
+  }, [subsQuery.data]);
 
   const handleDelete = useCallback((id: number, name: string) => {
     const doDelete = () => {
@@ -62,19 +93,21 @@ export default function SubscriptionsScreen() {
     updateMutation.mutate({ id, status: "cancelled" });
   }, []);
 
-  const filters: { label: string; value: FilterType }[] = [
-    { label: "All", value: "all" },
-    { label: "Active", value: "active" },
-    { label: "Cancelled", value: "cancelled" },
-    { label: "Trial", value: "trial" },
+  const filters: { label: string; value: FilterType; count: number }[] = [
+    { label: "All", value: "all", count: statusCounts.all },
+    { label: "Active", value: "active", count: statusCounts.active },
+    { label: "Cancelled", value: "cancelled", count: statusCounts.cancelled },
+    { label: "Trial", value: "trial", count: statusCounts.trial },
   ];
 
   if (!isAuthenticated) {
     return (
       <ScreenContainer className="px-6">
         <View className="flex-1 items-center justify-center">
-          <IconSymbol name="lock.fill" size={48} color={colors.muted} />
-          <Text className="text-lg font-semibold text-foreground mt-4">Sign in Required</Text>
+          <View className="w-16 h-16 rounded-2xl items-center justify-center mb-4" style={{ backgroundColor: colors.muted + "15" }}>
+            <IconSymbol name="lock.fill" size={32} color={colors.muted} />
+          </View>
+          <Text className="text-lg font-semibold text-foreground mt-2">Sign in Required</Text>
           <Text className="text-sm text-muted text-center mt-2">
             Sign in to view your subscriptions
           </Text>
@@ -85,12 +118,53 @@ export default function SubscriptionsScreen() {
 
   return (
     <ScreenContainer className="px-5">
-      {/* Header */}
-      <View className="pt-4 mb-4">
-        <Text className="text-2xl font-bold text-foreground">Subscriptions</Text>
-        <Text className="text-sm text-muted mt-1">
-          {filteredSubs.length} subscription{filteredSubs.length !== 1 ? "s" : ""}
-        </Text>
+      {/* Header with Add Button */}
+      <View className="pt-4 mb-4 flex-row items-start justify-between">
+        <View>
+          <Text className="text-2xl font-bold text-foreground">Subscriptions</Text>
+          <Text className="text-sm text-muted mt-1">
+            {statusCounts.active} active · ${totalMonthly.toFixed(2)}/mo
+          </Text>
+        </View>
+        <View className="flex-row gap-2">
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/scan" as any);
+            }}
+            style={({ pressed }) => [{
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.border,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.7 : 1,
+            }]}
+          >
+            <IconSymbol name="magnifyingglass" size={18} color={colors.primary} />
+          </Pressable>
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/edit-subscription?id=new" as any);
+            }}
+            style={({ pressed }) => [{
+              backgroundColor: colors.primary,
+              width: 40,
+              height: 40,
+              borderRadius: 12,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: pressed ? 0.9 : 1,
+              transform: [{ scale: pressed ? 0.95 : 1 }],
+            }]}
+          >
+            <IconSymbol name="plus" size={20} color="#FFFFFF" />
+          </Pressable>
+        </View>
       </View>
 
       {/* Search */}
@@ -125,10 +199,13 @@ export default function SubscriptionsScreen() {
                 backgroundColor: filter === f.value ? colors.primary : colors.surface,
                 borderWidth: filter === f.value ? 0 : 1,
                 borderColor: colors.border,
-                paddingHorizontal: 14,
+                paddingHorizontal: 12,
                 paddingVertical: 7,
                 borderRadius: 20,
                 opacity: pressed ? 0.8 : 1,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
               },
             ]}
           >
@@ -138,6 +215,19 @@ export default function SubscriptionsScreen() {
             >
               {f.label}
             </Text>
+            {f.count > 0 && (
+              <View
+                className="rounded-full px-1.5 py-0.5"
+                style={{ backgroundColor: filter === f.value ? "rgba(255,255,255,0.2)" : colors.border }}
+              >
+                <Text
+                  className="text-[9px] font-bold"
+                  style={{ color: filter === f.value ? "#FFFFFF" : colors.muted }}
+                >
+                  {f.count}
+                </Text>
+              </View>
+            )}
           </Pressable>
         ))}
       </View>
@@ -146,6 +236,7 @@ export default function SubscriptionsScreen() {
       {subsQuery.isLoading ? (
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" color={colors.primary} />
+          <Text className="text-sm text-muted mt-3">Loading subscriptions...</Text>
         </View>
       ) : (
         <FlatList
@@ -153,31 +244,51 @@ export default function SubscriptionsScreen() {
           keyExtractor={(item) => item.id.toString()}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 100 }}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
+          }
           ListEmptyComponent={
             <View className="items-center justify-center py-16">
-              <IconSymbol name="rectangle.stack.fill" size={48} color={colors.muted} />
-              <Text className="text-lg font-semibold text-foreground mt-4">No Subscriptions</Text>
+              <View className="w-16 h-16 rounded-2xl items-center justify-center mb-4" style={{ backgroundColor: colors.primary + "10" }}>
+                <IconSymbol name="rectangle.stack.fill" size={32} color={colors.primary} />
+              </View>
+              <Text className="text-lg font-semibold text-foreground">
+                {search || filter !== "all" ? "No Results" : "No Subscriptions"}
+              </Text>
               <Text className="text-sm text-muted text-center mt-2 px-8">
                 {search || filter !== "all"
                   ? "No subscriptions match your search or filter."
-                  : "Scan your inbox to detect subscriptions automatically."}
+                  : "Scan your inbox or add a subscription manually."}
               </Text>
               {!search && filter === "all" && (
-                <Pressable
-                  onPress={() => router.push("/scan" as any)}
-                  style={({ pressed }) => [
-                    {
+                <View className="flex-row gap-3 mt-5">
+                  <Pressable
+                    onPress={() => router.push("/scan" as any)}
+                    style={({ pressed }) => [{
                       backgroundColor: colors.primary,
-                      paddingHorizontal: 24,
+                      paddingHorizontal: 20,
                       paddingVertical: 12,
                       borderRadius: 12,
-                      marginTop: 16,
                       opacity: pressed ? 0.9 : 1,
-                    },
-                  ]}
-                >
-                  <Text className="text-white text-sm font-semibold">Scan Inbox</Text>
-                </Pressable>
+                    }]}
+                  >
+                    <Text className="text-white text-sm font-semibold">Scan Inbox</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => router.push("/edit-subscription?id=new" as any)}
+                    style={({ pressed }) => [{
+                      backgroundColor: colors.surface,
+                      borderWidth: 1,
+                      borderColor: colors.border,
+                      paddingHorizontal: 20,
+                      paddingVertical: 12,
+                      borderRadius: 12,
+                      opacity: pressed ? 0.9 : 1,
+                    }]}
+                  >
+                    <Text className="text-sm font-semibold text-foreground">Add Manually</Text>
+                  </Pressable>
+                </View>
               )}
             </View>
           }

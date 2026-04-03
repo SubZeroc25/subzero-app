@@ -1,0 +1,9 @@
+Project Status Notes (2026-04-03):
+- Dev server running, 0 TypeScript errors, 36 tests pass
+- Web preview shows landing page with "Sign In to Get Started" button
+- 4 tabs: Dashboard, Subscriptions, Analytics, Profile
+- Screenshot shows clean landing page with SubZero branding
+- Admin panel accessible from Profile screen (for admin users)
+- Discount system working in edit-subscription (both new and edit modes)
+- Promo code redemption working in pricing and profile screens
+- The landing page shows tab bar even when unauthenticated - this is expected behavior

@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, Platform, Switch, Alert, ActivityIndicator } from "react-native";
+import { ScrollView, Text, View, Pressable, Platform, Switch, Alert, ActivityIndicator, TextInput } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -23,30 +23,33 @@ export default function ProfileScreen() {
   const profileUpdate = trpc.profile.update.useMutation({
     onSuccess: () => profileQuery.refetch(),
   });
+  const redeemPromo = trpc.profile.redeemPromo.useMutation();
 
   const profile = profileQuery.data;
   const isPro = profile?.plan === "pro";
+  const isAdmin = (user as any)?.role === "admin" || (user as any)?.openId === process.env.EXPO_PUBLIC_OWNER_OPEN_ID;
 
   const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
   const [billingLoading, setBillingLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [showPromoInput, setShowPromoInput] = useState(false);
 
   const handleConnectEmail = useCallback(async (provider: "gmail" | "outlook") => {
     setConnectingProvider(provider);
     try {
-      // Build auth headers for native (Bearer token)
       const headers: Record<string, string> = {};
       if (Platform.OS !== "web") {
         const { getSessionToken } = await import("@/lib/_core/auth");
         const token = await getSessionToken();
         if (token) headers["Authorization"] = `Bearer ${token}`;
       }
-
       const response = await fetch(`${API_BASE}/api/email/${provider}/authorize`, {
         credentials: "include",
         headers,
       });
       const data = await response.json();
-
       if (!response.ok) {
         if (data.configured === false) {
           Alert.alert(
@@ -58,20 +61,15 @@ export default function ProfileScreen() {
         }
         return;
       }
-
       if (data.url) {
         if (Platform.OS !== "web") {
-          // On native, use openAuthSessionAsync so the browser can redirect back
-          // The callback URL will be the frontend URL with query params
           const frontendUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.replace(/^(https?:\/\/)3000-/, "$18081-") || "http://localhost:8081";
           const result = await WebBrowser.openAuthSessionAsync(data.url, frontendUrl);
           console.log(`[Profile] ${provider} auth session result:`, result);
         } else {
-          // On web, open in same window so cookies work
           window.location.href = data.url;
-          return; // Don't refetch, page will reload
+          return;
         }
-        // Refetch profile after returning from browser
         profileQuery.refetch();
       }
     } catch (error) {
@@ -86,7 +84,6 @@ export default function ProfileScreen() {
     const providerName = provider === "gmail" ? "Gmail" : "Outlook";
     const doDisconnect = async () => {
       try {
-        // Build auth headers for native (Bearer token)
         const headers: Record<string, string> = {};
         if (Platform.OS !== "web") {
           const { getSessionToken } = await import("@/lib/_core/auth");
@@ -106,7 +103,6 @@ export default function ProfileScreen() {
         Alert.alert("Error", `Failed to disconnect ${providerName}`);
       }
     };
-
     if (Platform.OS === "web") {
       if (confirm(`Disconnect ${providerName}?`)) doDisconnect();
     } else {
@@ -132,23 +128,19 @@ export default function ProfileScreen() {
         credentials: "include",
       });
       const data = await response.json();
-
       if (!response.ok) {
         if (data.configured === false) {
-          // Stripe not configured - show pricing page instead
           router.push("/pricing" as any);
         } else {
           Alert.alert("Error", data.error || "Failed to start checkout");
         }
         return;
       }
-
       if (data.url) {
         await WebBrowser.openBrowserAsync(data.url);
         profileQuery.refetch();
       }
     } catch (error) {
-      console.error("[Profile] Checkout failed:", error);
       router.push("/pricing" as any);
     } finally {
       setBillingLoading(false);
@@ -170,7 +162,6 @@ export default function ProfileScreen() {
         credentials: "include",
       });
       const data = await response.json();
-
       if (response.ok && data.url) {
         await WebBrowser.openBrowserAsync(data.url);
         profileQuery.refetch();
@@ -183,6 +174,24 @@ export default function ProfileScreen() {
       setBillingLoading(false);
     }
   }, [profileQuery]);
+
+  const handleRedeemPromo = useCallback(async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoResult(null);
+    try {
+      const result = await redeemPromo.mutateAsync({ code: promoCode.trim() });
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPromoResult({ type: "success", message: result.message });
+      setPromoCode("");
+      profileQuery.refetch();
+    } catch (error: any) {
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setPromoResult({ type: "error", message: error?.message || "Invalid promo code" });
+    } finally {
+      setPromoLoading(false);
+    }
+  }, [promoCode, redeemPromo, profileQuery]);
 
   const handleLogout = () => {
     const doLogout = () => {
@@ -258,21 +267,25 @@ export default function ProfileScreen() {
                     {isPro ? "Pro" : "Free"} Plan
                   </Text>
                 </View>
+                {isAdmin && (
+                  <View className="px-2.5 py-0.5 rounded-full" style={{ backgroundColor: colors.error + "15" }}>
+                    <Text className="text-xs font-semibold" style={{ color: colors.error }}>Admin</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
         </View>
 
-        {/* Upgrade / Manage Billing */}
-        {!isPro ? (
+        {/* Admin Panel Link */}
+        {isAdmin && (
           <Pressable
-            onPress={handleUpgrade}
-            disabled={billingLoading}
+            onPress={() => router.push("/admin" as any)}
             style={({ pressed }) => [
               {
-                backgroundColor: colors.primary + "08",
+                backgroundColor: colors.error + "08",
                 borderWidth: 1,
-                borderColor: colors.primary + "30",
+                borderColor: colors.error + "30",
                 borderRadius: 16,
                 padding: 16,
                 marginBottom: 16,
@@ -283,19 +296,126 @@ export default function ProfileScreen() {
               },
             ]}
           >
-            <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
-              <IconSymbol name="crown.fill" size={20} color={colors.primary} />
+            <View className="w-10 h-10 rounded-xl items-center justify-center" style={{ backgroundColor: colors.error + "15" }}>
+              <IconSymbol name="gearshape.2.fill" size={20} color={colors.error} />
             </View>
             <View className="flex-1">
-              <Text className="text-sm font-semibold text-foreground">Upgrade to Pro</Text>
-              <Text className="text-xs text-muted">Unlimited scans, full analytics, and more</Text>
+              <Text className="text-sm font-semibold text-foreground">Admin Panel</Text>
+              <Text className="text-xs text-muted">Manage users, promo codes, and analytics</Text>
             </View>
-            {billingLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <IconSymbol name="chevron.right" size={16} color={colors.muted} />
-            )}
+            <IconSymbol name="chevron.right" size={16} color={colors.muted} />
           </Pressable>
+        )}
+
+        {/* Upgrade / Manage Billing */}
+        {!isPro ? (
+          <View className="mb-4">
+            <Pressable
+              onPress={handleUpgrade}
+              disabled={billingLoading}
+              style={({ pressed }) => [
+                {
+                  backgroundColor: colors.primary + "08",
+                  borderWidth: 1,
+                  borderColor: colors.primary + "30",
+                  borderRadius: 16,
+                  padding: 16,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  opacity: pressed ? 0.9 : 1,
+                },
+              ]}
+            >
+              <View className="w-10 h-10 rounded-xl bg-primary/10 items-center justify-center">
+                <IconSymbol name="crown.fill" size={20} color={colors.primary} />
+              </View>
+              <View className="flex-1">
+                <Text className="text-sm font-semibold text-foreground">Upgrade to Pro</Text>
+                <Text className="text-xs text-muted">Unlimited scans, full analytics, and more</Text>
+              </View>
+              {billingLoading ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <IconSymbol name="chevron.right" size={16} color={colors.muted} />
+              )}
+            </Pressable>
+
+            {/* Promo Code Section */}
+            <Pressable
+              onPress={() => {
+                setShowPromoInput(!showPromoInput);
+                setPromoResult(null);
+              }}
+              style={({ pressed }) => [
+                {
+                  marginTop: 8,
+                  paddingVertical: 10,
+                  paddingHorizontal: 16,
+                  opacity: pressed ? 0.7 : 1,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                },
+              ]}
+            >
+              <IconSymbol name="gift.fill" size={14} color={colors.primary} />
+              <Text className="text-xs font-medium" style={{ color: colors.primary }}>
+                {showPromoInput ? "Hide promo code" : "Have a promo code?"}
+              </Text>
+            </Pressable>
+
+            {showPromoInput && (
+              <View className="mt-1 px-1">
+                <View className="flex-row gap-2">
+                  <TextInput
+                    value={promoCode}
+                    onChangeText={(t) => { setPromoCode(t.toUpperCase()); setPromoResult(null); }}
+                    placeholder="Enter code"
+                    placeholderTextColor={colors.muted}
+                    autoCapitalize="characters"
+                    returnKeyType="done"
+                    onSubmitEditing={handleRedeemPromo}
+                    className="flex-1 bg-surface rounded-xl px-4 py-3 text-foreground border border-border text-sm"
+                  />
+                  <Pressable
+                    onPress={handleRedeemPromo}
+                    disabled={promoLoading || !promoCode.trim()}
+                    style={({ pressed }) => [
+                      {
+                        backgroundColor: promoCode.trim() ? colors.primary : colors.muted + "30",
+                        borderRadius: 12,
+                        paddingHorizontal: 16,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        opacity: pressed ? 0.8 : 1,
+                      },
+                    ]}
+                  >
+                    {promoLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text className="text-background text-sm font-semibold">Apply</Text>
+                    )}
+                  </Pressable>
+                </View>
+                {promoResult && (
+                  <View
+                    className="mt-2 px-3 py-2 rounded-lg"
+                    style={{ backgroundColor: promoResult.type === "success" ? colors.success + "15" : colors.error + "15" }}
+                  >
+                    <Text
+                      className="text-xs"
+                      style={{ color: promoResult.type === "success" ? colors.success : colors.error }}
+                    >
+                      {promoResult.message}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
         ) : (
           <Pressable
             onPress={handleManageBilling}
@@ -345,7 +465,7 @@ export default function ProfileScreen() {
               <View>
                 <Text className="text-sm text-foreground">Gmail</Text>
                 {profile?.connectedGmail && (
-                  <Text className="text-xs text-muted">Connected</Text>
+                  <Text className="text-xs text-success">Connected</Text>
                 )}
               </View>
             </View>
@@ -391,7 +511,7 @@ export default function ProfileScreen() {
               <View>
                 <Text className="text-sm text-foreground">Outlook</Text>
                 {profile?.connectedOutlook && (
-                  <Text className="text-xs text-muted">Connected</Text>
+                  <Text className="text-xs text-success">Connected</Text>
                 )}
               </View>
             </View>
@@ -532,7 +652,7 @@ export default function ProfileScreen() {
         </Pressable>
 
         {/* Version */}
-        <Text className="text-xs text-muted text-center mt-4">SubZero v1.0.0</Text>
+        <Text className="text-xs text-muted text-center mt-4">SubZero v1.5.0</Text>
       </ScrollView>
     </ScreenContainer>
   );

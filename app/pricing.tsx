@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, Pressable, Platform, Alert, ActivityIndicator } from "react-native";
+import { ScrollView, Text, View, Pressable, Platform, Alert, ActivityIndicator, TextInput } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -6,6 +6,7 @@ import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
 import * as WebBrowser from "expo-web-browser";
 import { useState } from "react";
+import { trpc } from "@/lib/trpc";
 import Constants from "expo-constants";
 
 const API_BASE = Constants.expoConfig?.extra?.apiBaseUrl
@@ -19,7 +20,7 @@ const freeFeatures = [
   { text: "Unlimited scans", included: false },
   { text: "Full analytics & trends", included: false },
   { text: "Export reports", included: false },
-  { text: "Manual subscription add", included: false },
+  { text: "Discount tracking", included: false },
   { text: "Savings insights", included: false },
 ];
 
@@ -28,7 +29,7 @@ const proFeatures = [
   { text: "Unlimited subscriptions", included: true },
   { text: "Full analytics & trends", included: true },
   { text: "Export reports (CSV/PDF)", included: true },
-  { text: "Manual subscription add", included: true },
+  { text: "Discount & coupon tracking", included: true },
   { text: "Potential savings insights", included: true },
   { text: "Priority support", included: true },
   { text: "Early access to features", included: true },
@@ -39,37 +40,105 @@ export default function PricingScreen() {
   const colors = useColors();
 
   const [loading, setLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState("");
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [promoResult, setPromoResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [showPromo, setShowPromo] = useState(false);
+
+  const redeemPromo = trpc.profile.redeemPromo.useMutation();
+  const profileQuery = trpc.profile.get.useQuery();
+  const isPro = profileQuery.data?.plan === "pro";
 
   const handleUpgrade = async () => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     setLoading(true);
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (Platform.OS !== "web") {
+        const { getSessionToken } = await import("@/lib/_core/auth");
+        const token = await getSessionToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
       const response = await fetch(`${API_BASE}/api/billing/checkout`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         credentials: "include",
       });
       const data = await response.json();
 
       if (response.ok && data.url) {
         await WebBrowser.openBrowserAsync(data.url);
+        profileQuery.refetch();
       } else if (data.configured === false) {
-        const msg = "Stripe is being set up. Pro features will be available shortly.";
+        // Stripe not configured — show promo code option
+        setShowPromo(true);
+        const msg = "Stripe checkout is being set up. You can use a promo code to upgrade now.";
         if (Platform.OS === "web") alert(msg);
-        else Alert.alert("Coming Soon", msg);
+        else Alert.alert("Use Promo Code", msg);
       } else {
         const msg = data.error || "Failed to start checkout.";
         if (Platform.OS === "web") alert(msg);
         else Alert.alert("Error", msg);
       }
     } catch (error) {
-      const msg = "Stripe integration coming soon! Pro features will be available shortly.";
+      setShowPromo(true);
+      const msg = "Stripe checkout is being set up. You can use a promo code to upgrade now.";
       if (Platform.OS === "web") alert(msg);
-      else Alert.alert("Coming Soon", msg);
+      else Alert.alert("Use Promo Code", msg);
     } finally {
       setLoading(false);
     }
   };
+
+  const handleRedeemPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoResult(null);
+    try {
+      const result = await redeemPromo.mutateAsync({ code: promoCode.trim() });
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setPromoResult({ type: "success", message: result.message });
+      setPromoCode("");
+      profileQuery.refetch();
+      // Navigate back after success
+      setTimeout(() => router.back(), 1500);
+    } catch (error: any) {
+      if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setPromoResult({ type: "error", message: error?.message || "Invalid promo code" });
+    } finally {
+      setPromoLoading(false);
+    }
+  };
+
+  if (isPro) {
+    return (
+      <ScreenContainer edges={["top", "bottom", "left", "right"]}>
+        <View className="flex-1 items-center justify-center px-6">
+          <View className="w-20 h-20 rounded-3xl bg-primary/10 items-center justify-center mb-4">
+            <IconSymbol name="crown.fill" size={40} color={colors.primary} />
+          </View>
+          <Text className="text-2xl font-bold text-foreground mb-2">You're on Pro!</Text>
+          <Text className="text-sm text-muted text-center mb-8">
+            You have access to all premium features. Thank you for your support.
+          </Text>
+          <Pressable
+            onPress={() => router.back()}
+            style={({ pressed }) => [
+              {
+                backgroundColor: colors.primary,
+                paddingHorizontal: 32,
+                paddingVertical: 14,
+                borderRadius: 14,
+                opacity: pressed ? 0.9 : 1,
+              },
+            ]}
+          >
+            <Text className="text-white text-base font-semibold">Go Back</Text>
+          </Pressable>
+        </View>
+      </ScreenContainer>
+    );
+  }
 
   return (
     <ScreenContainer edges={["top", "bottom", "left", "right"]}>
@@ -143,6 +212,7 @@ export default function PricingScreen() {
           {/* Upgrade Button */}
           <Pressable
             onPress={handleUpgrade}
+            disabled={loading}
             style={({ pressed }) => [
               {
                 backgroundColor: colors.primary,
@@ -152,7 +222,7 @@ export default function PricingScreen() {
                 flexDirection: "row",
                 justifyContent: "center",
                 gap: 8,
-                opacity: pressed ? 0.9 : 1,
+                opacity: pressed || loading ? 0.85 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
@@ -167,20 +237,79 @@ export default function PricingScreen() {
             )}
           </Pressable>
 
+          {/* Promo Code Section */}
           <Pressable
-            onPress={() => {
-              if (Platform.OS === "web") {
-                alert("Restore purchases is not yet available.");
-              } else {
-                Alert.alert("Restore Purchases", "This feature will be available once Stripe is integrated.");
-              }
-            }}
+            onPress={() => setShowPromo(!showPromo)}
             style={({ pressed }) => [
-              { paddingVertical: 14, alignItems: "center", opacity: pressed ? 0.5 : 1 },
+              { paddingVertical: 14, alignItems: "center", opacity: pressed ? 0.5 : 1, flexDirection: "row", justifyContent: "center", gap: 6 },
             ]}
           >
-            <Text className="text-primary text-sm font-medium">Restore Purchases</Text>
+            <IconSymbol name="gift.fill" size={14} color={colors.primary} />
+            <Text className="text-primary text-sm font-medium">
+              {showPromo ? "Hide promo code" : "Have a promo code?"}
+            </Text>
           </Pressable>
+
+          {showPromo && (
+            <View className="mt-1">
+              <View className="flex-row gap-2">
+                <TextInput
+                  value={promoCode}
+                  onChangeText={(t) => { setPromoCode(t.toUpperCase()); setPromoResult(null); }}
+                  placeholder="Enter promo code"
+                  placeholderTextColor={colors.muted}
+                  autoCapitalize="characters"
+                  returnKeyType="done"
+                  onSubmitEditing={handleRedeemPromo}
+                  className="flex-1 bg-surface rounded-xl px-4 py-3 text-foreground border border-border text-sm"
+                />
+                <Pressable
+                  onPress={handleRedeemPromo}
+                  disabled={promoLoading || !promoCode.trim()}
+                  style={({ pressed }) => [
+                    {
+                      backgroundColor: promoCode.trim() ? colors.primary : colors.muted + "30",
+                      borderRadius: 12,
+                      paddingHorizontal: 20,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      opacity: pressed ? 0.8 : 1,
+                    },
+                  ]}
+                >
+                  {promoLoading ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text className="text-background text-sm font-semibold">Apply</Text>
+                  )}
+                </Pressable>
+              </View>
+              {promoResult && (
+                <View
+                  className="mt-3 px-4 py-3 rounded-xl"
+                  style={{ backgroundColor: promoResult.type === "success" ? colors.success + "15" : colors.error + "15" }}
+                >
+                  <Text
+                    className="text-sm font-medium"
+                    style={{ color: promoResult.type === "success" ? colors.success : colors.error }}
+                  >
+                    {promoResult.message}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Trust Section */}
+          <View className="mt-6 items-center">
+            <View className="flex-row items-center gap-2 mb-2">
+              <IconSymbol name="shield.fill" size={14} color={colors.muted} />
+              <Text className="text-xs text-muted">Secure payment via Stripe</Text>
+            </View>
+            <Text className="text-xs text-muted text-center">
+              Cancel anytime. No hidden fees. Your data stays private.
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
