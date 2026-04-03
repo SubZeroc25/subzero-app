@@ -1,10 +1,10 @@
-import { Text, View, ScrollView, TextInput, TouchableOpacity, Platform, Alert, ActivityIndicator } from "react-native";
+import { Text, View, ScrollView, TextInput, TouchableOpacity, Platform, Alert, ActivityIndicator, Linking } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 import * as Haptics from "expo-haptics";
-import * as MailComposer from "expo-mail-composer";
+import * as Clipboard from "expo-clipboard";
 import { useState, useEffect } from "react";
 import { trpc } from "@/lib/trpc";
 
@@ -24,6 +24,7 @@ export default function CancelSubscriptionScreen() {
   const [providerEmail, setProviderEmail] = useState("");
   const [isFollowUp, setIsFollowUp] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [copied, setCopied] = useState(false);
 
   // Fetch provider info
   const providerInfoQuery = trpc.cancellation.getProviderInfo.useQuery(
@@ -75,34 +76,28 @@ export default function CancelSubscriptionScreen() {
     }
   };
 
+  const handleCopyEmail = async () => {
+    const fullEmail = `To: ${providerEmail}\nSubject: ${emailSubject}\n\n${emailBody}`;
+    await Clipboard.setStringAsync(fullEmail);
+    setCopied(true);
+    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    setTimeout(() => setCopied(false), 2500);
+  };
+
   const handleOpenMailApp = async () => {
     if (!subscriptionId) return;
 
     try {
       setStep("opening_mail");
 
-      // Check if mail composer is available
-      const isAvailable = await MailComposer.isAvailableAsync();
+      if (Platform.OS === "web") {
+        // Web: use mailto: link
+        const subject = encodeURIComponent(emailSubject);
+        const body = encodeURIComponent(emailBody);
+        const mailtoUrl = `mailto:${providerEmail}?subject=${subject}&body=${body}`;
+        window.open(mailtoUrl, "_blank");
 
-      if (!isAvailable) {
-        // Fallback: show the email content for manual copy
-        Alert.alert(
-          "No Mail App Found",
-          "Please copy the email content below and send it manually to " + providerEmail,
-          [{ text: "OK", onPress: () => setStep("preview") }]
-        );
-        return;
-      }
-
-      const result = await MailComposer.composeAsync({
-        recipients: [providerEmail],
-        subject: emailSubject,
-        body: emailBody,
-        isHtml: false,
-      });
-
-      if (result.status === MailComposer.MailComposerStatus.SENT) {
-        // Record that the email was sent
+        // Record the send optimistically
         await recordSentMutation.mutateAsync({
           subscriptionId,
           providerEmail,
@@ -110,24 +105,53 @@ export default function CancelSubscriptionScreen() {
           body: emailBody,
         });
         setStep("sent");
-        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else if (result.status === MailComposer.MailComposerStatus.CANCELLED) {
-        // User cancelled - go back to preview
-        setStep("preview");
       } else {
-        // Saved or undetermined - assume they might send it
-        // Record optimistically
-        await recordSentMutation.mutateAsync({
-          subscriptionId,
-          providerEmail,
+        // Mobile: use expo-mail-composer
+        const MailComposer = await import("expo-mail-composer");
+        const isAvailable = await MailComposer.isAvailableAsync();
+
+        if (!isAvailable) {
+          // Fallback: offer to copy the email content
+          Alert.alert(
+            "No Mail App Found",
+            "No mail app is configured on this device. Would you like to copy the email content instead?",
+            [
+              { text: "Cancel", style: "cancel", onPress: () => setStep("preview") },
+              {
+                text: "Copy Email",
+                onPress: async () => {
+                  await handleCopyEmail();
+                  setStep("preview");
+                },
+              },
+            ]
+          );
+          return;
+        }
+
+        const result = await MailComposer.composeAsync({
+          recipients: [providerEmail],
           subject: emailSubject,
           body: emailBody,
+          isHtml: false,
         });
-        setStep("sent");
-        if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        if (result.status === MailComposer.MailComposerStatus.CANCELLED) {
+          setStep("preview");
+        } else {
+          // SENT, SAVED, or UNDETERMINED — record optimistically
+          await recordSentMutation.mutateAsync({
+            subscriptionId,
+            providerEmail,
+            subject: emailSubject,
+            body: emailBody,
+          });
+          setStep("sent");
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
       }
     } catch (error: any) {
-      console.error("[Cancel] Mail composer error:", error);
+      console.error("[Cancel] Mail error:", error);
       setStep("error");
       setErrorMessage(error.message || "Failed to open mail app");
       if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -240,9 +264,11 @@ export default function CancelSubscriptionScreen() {
         <Text className="text-sm font-semibold text-foreground mb-3">How it works</Text>
         <View className="gap-3">
           {[
-            { icon: "sparkles" as const, text: "AI generates an aggressive cancellation email citing consumer protection laws" },
-            { icon: "pencil" as const, text: "You review and edit the email before sending" },
-            { icon: "paperplane.fill" as const, text: "Opens your mail app with the email pre-filled — you hit send" },
+            { text: "AI generates an aggressive cancellation email citing consumer protection laws" },
+            { text: "You review and edit the email before sending" },
+            { text: Platform.OS === "web"
+              ? "Opens a mailto: link in your default email client — you hit send"
+              : "Opens your mail app with the email pre-filled — you hit send" },
           ].map((item, i) => (
             <View key={i} className="flex-row items-start gap-3">
               <View className="w-6 h-6 rounded-full items-center justify-center" style={{ backgroundColor: colors.primary + "15" }}>
@@ -318,6 +344,7 @@ export default function CancelSubscriptionScreen() {
 
       {/* Action Buttons */}
       <View className="gap-3">
+        {/* Primary: Send via mail */}
         <TouchableOpacity
           onPress={handleOpenMailApp}
           className="rounded-xl p-4 items-center"
@@ -327,11 +354,37 @@ export default function CancelSubscriptionScreen() {
           <View className="flex-row items-center gap-2">
             <IconSymbol name="paperplane.fill" size={18} color="#fff" />
             <Text className="text-base font-bold" style={{ color: "#fff" }}>
-              Open in Mail App
+              {Platform.OS === "web" ? "Open in Email Client" : "Open in Mail App"}
             </Text>
           </View>
         </TouchableOpacity>
 
+        {/* Secondary: Copy to clipboard */}
+        <TouchableOpacity
+          onPress={handleCopyEmail}
+          className="rounded-xl p-3 items-center border"
+          activeOpacity={0.8}
+          style={{
+            backgroundColor: copied ? colors.success + "10" : colors.surface,
+            borderColor: copied ? colors.success : colors.border,
+          }}
+        >
+          <View className="flex-row items-center gap-2">
+            <IconSymbol
+              name={copied ? "checkmark.circle.fill" : "doc.on.doc"}
+              size={16}
+              color={copied ? colors.success : colors.foreground}
+            />
+            <Text
+              className="text-sm font-medium"
+              style={{ color: copied ? colors.success : colors.foreground }}
+            >
+              {copied ? "Copied to Clipboard!" : "Copy Email to Clipboard"}
+            </Text>
+          </View>
+        </TouchableOpacity>
+
+        {/* Back */}
         <TouchableOpacity
           onPress={() => setStep("info")}
           className="rounded-xl p-3 items-center border border-border"
@@ -360,13 +413,13 @@ export default function CancelSubscriptionScreen() {
         <Text className="text-sm font-semibold text-foreground mb-2">What happens next?</Text>
         <View className="gap-2">
           <Text className="text-xs text-muted leading-relaxed">
-            • The provider should respond within 3-5 business days
+            {"\u2022"} The provider should respond within 3-5 business days
           </Text>
           <Text className="text-xs text-muted leading-relaxed">
-            • If they don't respond, come back and send a follow-up with escalated language
+            {"\u2022"} If they don't respond, come back and send a follow-up with escalated language
           </Text>
           <Text className="text-xs text-muted leading-relaxed">
-            • Your subscription has been marked as "cancelled" in SubZero
+            {"\u2022"} Your subscription has been marked as "cancelled" in SubZero
           </Text>
         </View>
       </View>
@@ -408,7 +461,7 @@ export default function CancelSubscriptionScreen() {
           <View className="flex-1 items-center justify-center gap-4">
             <ActivityIndicator size="large" color={colors.primary} />
             <Text className="text-sm text-muted">
-              {step === "opening_mail" ? "Opening mail app..." : "Generating email..."}
+              {step === "opening_mail" ? "Opening email client..." : "Generating email..."}
             </Text>
           </View>
         )}

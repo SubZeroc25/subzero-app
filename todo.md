@@ -200,3 +200,10 @@
 - [x] Update tests for new flows
 - [ ] Remove unused email-providers.ts and email-scanner.ts (kept for reference, not imported)
 - [x] Remove GMAIL_CLIENT_ID/SECRET and OUTLOOK_CLIENT_ID/SECRET env vars (no longer required)
+
+## Phase 14: Web Platform Compatibility
+
+- [x] Cancel-subscription: add mailto: link fallback + copy-to-clipboard on web (expo-mail-composer is mobile-only)
+- [x] Scan flow: verify expo-image-picker works on web (uses file input), add fallback if needed
+- [x] Audit all Platform.OS checks for consistent web experience
+- [x] Ensure all screens render correctly on both mobile and web

@@ -29,7 +29,7 @@ export default function ScanScreen() {
     try {
       let pickerResult: ImagePicker.ImagePickerResult;
 
-      if (source === "camera") {
+      if (source === "camera" && Platform.OS !== "web") {
         const { status } = await ImagePicker.requestCameraPermissionsAsync();
         if (status !== "granted") {
           Alert.alert("Permission Needed", "Camera access is required to take photos of receipts.");
@@ -41,10 +41,13 @@ export default function ScanScreen() {
           base64: true,
         });
       } else {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== "granted") {
-          Alert.alert("Permission Needed", "Photo library access is required to select receipt images.");
-          return;
+        // On web, requestMediaLibraryPermissionsAsync always returns granted
+        if (Platform.OS !== "web") {
+          const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (status !== "granted") {
+            Alert.alert("Permission Needed", "Photo library access is required to select receipt images.");
+            return;
+          }
         }
         pickerResult = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ["images"],
@@ -138,38 +141,43 @@ export default function ScanScreen() {
 
             {/* Action Buttons */}
             <View className="gap-4">
-              <TouchableOpacity
-                onPress={() => pickImage("camera")}
-                className="bg-primary rounded-2xl p-5 flex-row items-center"
-                activeOpacity={0.8}
-              >
-                <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: "rgba(255,255,255,0.2)" }}>
-                  <IconSymbol name="camera.fill" size={24} color="#fff" />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-lg font-semibold" style={{ color: "#fff" }}>Take Photo</Text>
-                  <Text className="text-sm" style={{ color: "rgba(255,255,255,0.8)" }}>
-                    Snap a receipt or billing email
-                  </Text>
-                </View>
-                <IconSymbol name="chevron.right" size={20} color="rgba(255,255,255,0.6)" />
-              </TouchableOpacity>
+              {/* Camera option - only on mobile */}
+              {Platform.OS !== "web" && (
+                <TouchableOpacity
+                  onPress={() => pickImage("camera")}
+                  className="bg-primary rounded-2xl p-5 flex-row items-center"
+                  activeOpacity={0.8}
+                >
+                  <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: "rgba(255,255,255,0.2)" }}>
+                    <IconSymbol name="camera.fill" size={24} color="#fff" />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-lg font-semibold" style={{ color: "#fff" }}>Take Photo</Text>
+                    <Text className="text-sm" style={{ color: "rgba(255,255,255,0.8)" }}>
+                      Snap a receipt or billing email
+                    </Text>
+                  </View>
+                  <IconSymbol name="chevron.right" size={20} color="rgba(255,255,255,0.6)" />
+                </TouchableOpacity>
+              )}
 
               <TouchableOpacity
                 onPress={() => pickImage("library")}
-                className="bg-surface rounded-2xl p-5 flex-row items-center border border-border"
+                className={Platform.OS === "web" ? "bg-primary rounded-2xl p-5 flex-row items-center" : "bg-surface rounded-2xl p-5 flex-row items-center border border-border"}
                 activeOpacity={0.8}
               >
-                <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: colors.primary + "15" }}>
-                  <IconSymbol name="photo.fill" size={24} color={colors.primary} />
+                <View className="w-12 h-12 rounded-full items-center justify-center mr-4" style={{ backgroundColor: Platform.OS === "web" ? "rgba(255,255,255,0.2)" : colors.primary + "15" }}>
+                  <IconSymbol name="photo.fill" size={24} color={Platform.OS === "web" ? "#fff" : colors.primary} />
                 </View>
                 <View className="flex-1">
-                  <Text className="text-lg font-semibold text-foreground">Choose from Library</Text>
-                  <Text className="text-sm text-muted">
-                    Select a saved screenshot or receipt
+                  <Text className={Platform.OS === "web" ? "text-lg font-semibold" : "text-lg font-semibold text-foreground"} style={Platform.OS === "web" ? { color: "#fff" } : undefined}>
+                    {Platform.OS === "web" ? "Upload Image" : "Choose from Library"}
+                  </Text>
+                  <Text className="text-sm" style={{ color: Platform.OS === "web" ? "rgba(255,255,255,0.8)" : colors.muted }}>
+                    {Platform.OS === "web" ? "Select a screenshot or receipt from your computer" : "Select a saved screenshot or receipt"}
                   </Text>
                 </View>
-                <IconSymbol name="chevron.right" size={20} color={colors.muted} />
+                <IconSymbol name="chevron.right" size={20} color={Platform.OS === "web" ? "rgba(255,255,255,0.6)" : colors.muted} />
               </TouchableOpacity>
             </View>
 
