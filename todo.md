@@ -207,3 +207,7 @@
 - [x] Scan flow: verify expo-image-picker works on web (uses file input), add fallback if needed
 - [x] Audit all Platform.OS checks for consistent web experience
 - [x] Ensure all screens render correctly on both mobile and web
+
+## Phase 15: APK Build Fix
+
+- [x] Fix Gradle build failure: react-native-gesture-handler compileReleaseJavaWithJavac dependency resolution (pinned kotlinVersion=2.1.20, compileSdkVersion=36, targetSdkVersion=36)
