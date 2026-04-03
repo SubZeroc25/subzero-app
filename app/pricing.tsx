@@ -195,11 +195,11 @@ export default function PricingScreen() {
               </View>
             </View>
             <View className="flex-row items-baseline gap-1 mb-4">
-              <Text className="text-3xl font-bold text-foreground">$4.99</Text>
+              <Text className="text-3xl font-bold text-foreground">$9.99</Text>
               <Text className="text-sm text-muted">/month</Text>
             </View>
             <Text className="text-xs text-muted mb-4">
-              or $39.99/year (save 33%)
+              or $79.99/year (save 33%)
             </Text>
             {proFeatures.map((f, i) => (
               <View key={i} className="flex-row items-center gap-3 mb-2.5">

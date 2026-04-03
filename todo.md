@@ -128,3 +128,7 @@
 - [x] Verify Stripe webhook secret configured
 - [ ] Verify Stripe checkout session creation works (end-to-end)
 - [ ] Verify Stripe customer portal access (end-to-end)
+
+## Phase 9: Pricing Update
+
+- [x] Update Pro price from $4.99 to $9.99/month across all screens
