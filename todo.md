@@ -42,3 +42,14 @@
 - [x] Push notification system for renewal reminders
 - [x] Renewal reminder scheduling logic
 - [x] Notification permission handling
+
+## Phase 3: Email Scanning & Validation
+
+- [x] Email provider credential secrets (Gmail, Outlook)
+- [x] Email provider credential validation
+- [x] Email scanning worker service
+- [x] Gmail API email fetching
+- [x] Outlook API email fetching
+- [x] Subscription editing form validation
+- [x] Amount and date validation
+- [x] Error handling and user feedback
