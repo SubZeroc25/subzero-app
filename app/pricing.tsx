@@ -36,6 +36,7 @@ const proFeatures = [
   { text: "Early access to features", included: true },
 ];
 
+/* updated pricing v2 */
 export default function PricingScreen() {
   const router = useRouter();
   const colors = useColors();
