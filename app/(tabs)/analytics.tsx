@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
 import { useState, useCallback, useMemo } from "react";
+import * as Clipboard from "expo-clipboard";
 
 const CATEGORY_COLORS: Record<string, string> = {
   entertainment: "#EF4444",
@@ -320,15 +321,46 @@ export default function AnalyticsScreen() {
 
         {/* Export Button */}
         <Pressable
-          onPress={() => {
+          onPress={async () => {
             if (!isPro) {
               if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
               router.push("/pricing" as any);
-            } else {
-              if (Platform.OS === "web") alert("Export feature coming soon!");
-              else {
+              return;
+            }
+            // Build report text
+            const lines: string[] = [];
+            lines.push("SubZero Spending Report");
+            lines.push(`Generated: ${new Date().toLocaleDateString()}`);
+            lines.push("");
+            lines.push(`Monthly Spend: $${analytics?.totalMonthly?.toFixed(2) ?? "0.00"}`);
+            lines.push(`Yearly Estimate: $${analytics?.totalYearly?.toFixed(2) ?? "0.00"}`);
+            lines.push(`Total Savings: $${analytics?.totalSavings?.toFixed(2) ?? "0.00"}`);
+            lines.push("");
+            lines.push("--- Top Subscriptions ---");
+            (analytics?.topSubscriptions ?? []).forEach((s: any, i: number) => {
+              lines.push(`${i + 1}. ${s.name} — $${s.amount.toFixed(2)}/${s.billingCycle}`);
+            });
+            lines.push("");
+            lines.push("--- Category Breakdown ---");
+            (analytics?.categoryBreakdown ?? []).forEach((c: any) => {
+              lines.push(`${c.category}: $${c.amount.toFixed(2)}/mo (${c.count} subs)`);
+            });
+            const report = lines.join("\n");
+            try {
+              await Clipboard.setStringAsync(report);
+              if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              if (Platform.OS === "web") {
+                alert("Report copied to clipboard!");
+              } else {
                 const { Alert: RNAlert } = require("react-native");
-                RNAlert.alert("Coming Soon", "Export feature will be available in the next update.");
+                RNAlert.alert("Copied!", "Spending report copied to clipboard. Paste it anywhere to share.");
+              }
+            } catch {
+              if (Platform.OS === "web") {
+                alert("Failed to copy report.");
+              } else {
+                const { Alert: RNAlert } = require("react-native");
+                RNAlert.alert("Error", "Failed to copy report to clipboard.");
               }
             }
           }}

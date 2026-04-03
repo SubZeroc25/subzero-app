@@ -1,4 +1,4 @@
-import { Text, View, Pressable, Alert, Platform } from "react-native";
+import { Text, View, Pressable, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
@@ -67,20 +67,9 @@ export function SubscriptionCard({
   }, [item.id, onEdit]);
 
   const handleDelete = useCallback(() => {
-    if (Platform.OS !== "web") Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    const doDelete = () => {
-      onDelete(item.id, item.name);
-      swipeableRef.current?.close();
-    };
-
-    if (Platform.OS === "web") {
-      if (confirm(`Remove ${item.name}?`)) doDelete();
-    } else {
-      Alert.alert("Remove Subscription", `Remove ${item.name} from your list?`, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Remove", style: "destructive", onPress: doDelete },
-      ]);
-    }
+    // Delegate confirmation to parent's onDelete handler to avoid double-alert
+    onDelete(item.id, item.name);
+    swipeableRef.current?.close();
   }, [item.id, item.name, onDelete]);
 
   const handleCancel = useCallback(() => {

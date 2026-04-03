@@ -573,16 +573,56 @@ export default function ProfileScreen() {
             />
           </View>
 
-          <View className="px-5 py-3 flex-row items-center justify-between border-b border-border">
+          <Pressable
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              const currencies = ["USD", "EUR", "GBP", "CAD", "AUD", "JPY", "INR"];
+              if (Platform.OS === "web") {
+                const choice = prompt(`Choose currency (${currencies.join(", ")}):`, profile?.currency ?? "USD");
+                if (choice && currencies.includes(choice.toUpperCase())) {
+                  profileUpdate.mutate({ currency: choice.toUpperCase() } as any);
+                }
+              } else {
+                Alert.alert(
+                  "Select Currency",
+                  "Choose your preferred currency for displaying subscription amounts.",
+                  [
+                    ...currencies.map((c) => ({
+                      text: c,
+                      onPress: () => profileUpdate.mutate({ currency: c } as any),
+                      style: (c === (profile?.currency ?? "USD") ? "cancel" : "default") as any,
+                    })),
+                    { text: "Cancel", style: "cancel" },
+                  ]
+                );
+              }
+            }}
+            style={({ pressed }) => [{
+              paddingHorizontal: 20,
+              paddingVertical: 12,
+              flexDirection: "row" as const,
+              alignItems: "center" as const,
+              justifyContent: "space-between" as const,
+              borderBottomWidth: 0.5,
+              borderBottomColor: colors.border,
+              opacity: pressed ? 0.7 : 1,
+            }]}
+          >
             <View className="flex-row items-center gap-3">
               <IconSymbol name="doc.text.fill" size={20} color={colors.primary} />
               <Text className="text-sm text-foreground">Currency</Text>
             </View>
-            <Text className="text-sm text-muted">{profile?.currency ?? "USD"}</Text>
-          </View>
+            <View className="flex-row items-center gap-1">
+              <Text className="text-sm text-muted">{profile?.currency ?? "USD"}</Text>
+              <IconSymbol name="chevron.right" size={12} color={colors.muted} />
+            </View>
+          </Pressable>
 
           <Pressable
-            onPress={() => {}}
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              WebBrowser.openBrowserAsync("https://manus.im/privacy");
+            }}
             style={({ pressed }) => [
               {
                 paddingHorizontal: 20,
@@ -604,7 +644,17 @@ export default function ProfileScreen() {
           </Pressable>
 
           <Pressable
-            onPress={() => {}}
+            onPress={() => {
+              if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              if (Platform.OS === "web") {
+                alert("SubZero v1.0.0\n\nYour personal subscription manager. Track, manage, and cancel subscriptions with ease.");
+              } else {
+                Alert.alert(
+                  "About SubZero",
+                  "Version 1.0.0\n\nYour personal subscription manager. Track, manage, and cancel subscriptions with ease.\n\nPowered by AI to help you save money."
+                );
+              }
+            }}
             style={({ pressed }) => [
               {
                 paddingHorizontal: 20,
@@ -652,7 +702,7 @@ export default function ProfileScreen() {
         </Pressable>
 
         {/* Version */}
-        <Text className="text-xs text-muted text-center mt-4">SubZero v1.5.0</Text>
+        <Text className="text-xs text-muted text-center mt-4">SubZero v1.0.0</Text>
       </ScrollView>
     </ScreenContainer>
   );

@@ -68,8 +68,14 @@ export default function SubscriptionsScreen() {
       const amt = Number(s.amount) || 0;
       const discount = Number(s.discountAmount) || 0;
       const effective = Math.max(amt - discount, 0);
-      if (s.billingCycle === "yearly") return sum + effective / 12;
-      return sum + effective;
+      switch (s.billingCycle) {
+        case "weekly": return sum + effective * 4.33;
+        case "monthly": return sum + effective;
+        case "quarterly": return sum + effective / 3;
+        case "yearly": return sum + effective / 12;
+        case "one-time": return sum; // exclude one-time from monthly
+        default: return sum + effective;
+      }
     }, 0);
   }, [subsQuery.data]);
 

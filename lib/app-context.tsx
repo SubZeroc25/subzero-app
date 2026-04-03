@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from "react";
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
@@ -36,13 +36,16 @@ const AppContext = createContext<AppContextType>({
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth();
   const [state, setState] = useState<AppState>(defaultState);
+  const serverDataLoaded = useRef(false);
 
   const profileQuery = trpc.profile.get.useQuery(undefined, {
     enabled: isAuthenticated,
   });
 
+  // Server data always takes priority over cached data
   useEffect(() => {
     if (profileQuery.data) {
+      serverDataLoaded.current = true;
       setState({
         onboardingComplete: profileQuery.data.onboardingComplete,
         isProUser: profileQuery.data.plan === "pro",
@@ -52,10 +55,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [profileQuery.data]);
 
-  // Load cached state for offline support
+  // Load cached state only as initial fallback before server data arrives
   useEffect(() => {
     AsyncStorage.getItem("subzero_app_state").then((cached) => {
-      if (cached) {
+      if (cached && !serverDataLoaded.current) {
         try {
           const parsed = JSON.parse(cached);
           setState((prev) => ({ ...prev, ...parsed }));
@@ -81,9 +84,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, connectedOutlook: v }));
   }, []);
 
+  // Use ref-based approach to avoid unstable callback reference
+  const profileQueryRef = useRef(profileQuery);
+  profileQueryRef.current = profileQuery;
+
   const refreshProfile = useCallback(() => {
-    profileQuery.refetch();
-  }, [profileQuery]);
+    profileQueryRef.current.refetch();
+  }, []);
 
   return (
     <AppContext.Provider

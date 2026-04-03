@@ -52,6 +52,19 @@ const MAPPING = {
   "xmark.circle.fill": "cancel",
   "pencil": "edit",
   "doc.on.doc.fill": "content-copy",
+  "calendar": "event",
+  "info.circle.fill": "info",
+  "link": "link",
+  // Analytics category icons
+  "play.fill": "play-arrow",
+  "hammer.fill": "build",
+  "cloud.fill": "cloud",
+  "heart.fill": "favorite",
+  "book.fill": "menu-book",
+  "cart.fill": "shopping-cart",
+  "newspaper.fill": "article",
+  "person.2.fill": "people",
+  "ellipsis": "more-horiz",
 } as IconMapping;
 
 export function IconSymbol({

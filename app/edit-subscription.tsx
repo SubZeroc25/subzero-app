@@ -96,6 +96,41 @@ export default function EditSubscriptionScreen() {
   const updateMutation = trpc.subscriptions.update.useMutation();
   const deleteMutation = trpc.subscriptions.delete.useMutation();
 
+  // Fetch existing subscription data for edit mode
+  const subsQuery = trpc.subscriptions.list.useQuery(undefined, { enabled: !isNewMode });
+
+  // Populate form with existing data when editing
+  useEffect(() => {
+    if (!isNewMode && subsQuery.data && subscriptionId) {
+      const sub = subsQuery.data.find((s: any) => s.id === subscriptionId);
+      if (sub) {
+        setName(sub.name || "");
+        setProvider(sub.provider || "");
+        setAmount(String(Number(sub.amount) || ""));
+        setCategory(sub.category || "other");
+        setBillingCycle(sub.billingCycle || "monthly");
+        setStatus(sub.status || "active");
+        setNextRenewalDate(
+          sub.nextRenewalDate
+            ? new Date(sub.nextRenewalDate).toISOString().split("T")[0]
+            : ""
+        );
+        if (sub.discountPercent && Number(sub.discountPercent) > 0) {
+          setDiscountPercent(String(sub.discountPercent));
+          setShowDiscount(true);
+        }
+        if (sub.discountAmount && Number(sub.discountAmount) > 0) {
+          setDiscountAmount(String(Number(sub.discountAmount)));
+          setShowDiscount(true);
+        }
+        if (sub.discountNote) {
+          setDiscountNote(sub.discountNote);
+          setShowDiscount(true);
+        }
+      }
+    }
+  }, [isNewMode, subsQuery.data, subscriptionId]);
+
   const currentErrors = useMemo<FormErrors>(() => ({
     name: validateName(name),
     amount: validateAmount(amount),
@@ -356,6 +391,14 @@ export default function EditSubscriptionScreen() {
           </Pressable>
         </View>
 
+        {/* Loading state for edit mode */}
+        {!isNewMode && subsQuery.isLoading && (
+          <View className="flex-1 items-center justify-center py-20">
+            <ActivityIndicator size="large" color={colors.primary} />
+            <Text className="text-sm text-muted mt-3">Loading subscription...</Text>
+          </View>
+        )}
+
         {/* Save Error Banner */}
         {saveError && (
           <View
@@ -374,6 +417,7 @@ export default function EditSubscriptionScreen() {
         )}
 
         {/* Form */}
+        {(isNewMode || !subsQuery.isLoading) && (
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
           {renderField("Service Name", name, setName, "name", {
             placeholder: "e.g., Netflix, Spotify, iCloud",
@@ -520,6 +564,7 @@ export default function EditSubscriptionScreen() {
             </Pressable>
           )}
         </ScrollView>
+        )}
 
         {/* Save Button */}
         <View className="gap-3 pb-4">

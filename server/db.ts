@@ -398,7 +398,14 @@ export async function getSpendingAnalytics(userId: number) {
     const amount = Number(sub.amount);
     const discount = sub.discountPercent ? amount * (sub.discountPercent / 100) : (sub.discountAmount ? Number(sub.discountAmount) : 0);
     const effectiveAmount = amount - discount;
-    const monthlyAmount = sub.billingCycle === "yearly" ? effectiveAmount / 12 : effectiveAmount;
+    let monthlyAmount = effectiveAmount;
+    switch (sub.billingCycle) {
+      case "weekly": monthlyAmount = effectiveAmount * 4.33; break;
+      case "monthly": monthlyAmount = effectiveAmount; break;
+      case "quarterly": monthlyAmount = effectiveAmount / 3; break;
+      case "yearly": monthlyAmount = effectiveAmount / 12; break;
+      case "one-time": monthlyAmount = 0; break;
+    }
     existing.amount += monthlyAmount;
     existing.count += 1;
     categoryMap.set(sub.category, existing);

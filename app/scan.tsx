@@ -6,7 +6,7 @@ import { useColors } from "@/hooks/use-colors";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
 import * as Haptics from "expo-haptics";
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 type ScanStep = "choose" | "connecting" | "scanning" | "analyzing" | "completed" | "failed";
 
@@ -29,7 +29,6 @@ export default function ScanScreen() {
   const [subsFound, setSubsFound] = useState(0);
   const [privacyIdx, setPrivacyIdx] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const scanStart = trpc.scan.start.useMutation();
   const scanStatus = trpc.scan.status.useQuery(

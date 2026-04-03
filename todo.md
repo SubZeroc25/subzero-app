@@ -145,3 +145,31 @@
 - [x] Add follow-up email capability for providers that don't respond
 - [x] Update subscription status after cancellation email is sent
 - [x] Write tests for the cancellation feature (17 tests, all passing)
+
+## Phase 11: Production Audit & Fixes
+
+### Calculations & Data
+- [x] Fix totalMonthly calculation to handle weekly, quarterly, one-time billing cycles
+- [x] Fix server-side category breakdown monthly normalization for all billing cycles
+- [x] Fix edit-subscription form not loading existing data in edit mode
+
+### UI & Navigation
+- [x] Add all missing category icons (play, hammer, cloud, heart, book, cart, newspaper, people, ellipsis)
+- [x] Fix double-delete confirmation on subscription cards (card + parent both showing Alert)
+- [x] Add cancel-subscription route to Stack layout
+- [x] Fix Privacy Policy button (was dead-end, now opens web browser)
+- [x] Fix About button (was dead-end, now shows app info dialog)
+- [x] Fix version string (was "v0.1.0 Beta", now "v1.0.0")
+- [x] Make currency setting tappable with picker (was static display)
+- [x] Implement Export Report button (copies formatted report to clipboard for Pro users)
+
+### State Management
+- [x] Fix refreshProfile callback stability (useRef pattern to avoid unstable reference)
+- [x] Fix AsyncStorage race condition (server data now takes priority over stale cache)
+
+### Code Quality
+- [x] Remove unused pollRef from scan.tsx
+- [x] Fix brittle Stripe tests (skip when env vars not set, remove hardcoded price ID)
+
+### Test Results
+- [x] All 58 tests passing, 0 TypeScript errors
