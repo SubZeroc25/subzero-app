@@ -1,0 +1,1722 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Diana Buergin — Tzolk'in · Practice of Return</title>
+<meta name="description" content="A ceremonial practice of Kambo, embodied tantra, and spiritual healing — held in the rhythm of the sacred round." />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Newsreader:ital,opsz,wght@0,6..72,300..700;1,6..72,300..700&family=JetBrains+Mono:wght@400;500&display=swap" />
+
+<style>
+  /* ════════════════════════════════════════════════════════════════════
+     TZOLK'IN — THE SACRED ROUND OF RETURN
+     A site organized as a descent through the 13 heavens (Oxlahuntiku).
+     Each chapter is a gate. The page knows the day in the Maya count.
+     ════════════════════════════════════════════════════════════════════ */
+
+  /* ────── Tokens — Ivory · Verdigris · Obsidian ────── */
+  :root {
+    --bg:        #f6f4ee;
+    --bg-2:      #ecebe2;
+    --paper:     #fdfcf7;
+    --ink:       #0c0e0c;
+    --ink-soft:  #2a2f2a;
+    --muted:     #6f7670;
+    --rule:      #d8d6cb;
+
+    --east:      #1f4034;
+    --north:     #f4f2e8;
+    --west:      #07090a;
+    --south:     #2a5a47;
+    --accent:    var(--east);
+
+    --serif:     "Instrument Serif", "Cormorant Garamond", serif;
+    --body:      "Newsreader", Georgia, serif;
+    --mono:      "JetBrains Mono", ui-monospace, monospace;
+
+    --gutter:    clamp(20px, 4vw, 56px);
+    --max:       1320px;
+    --col:       880px;
+
+    --cursor-size: 14px;
+  }
+
+  /* ────── Reset + base ────── */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--body);
+    font-weight: 380;
+    font-size: 17px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overflow-x: hidden;
+    transition: background-color .8s ease, color .8s ease;
+  }
+  ::selection { background: var(--accent); color: var(--paper); }
+  img, svg { display: block; max-width: 100%; }
+  a { color: inherit; }
+
+  @media (hover: hover) and (pointer: fine) {
+    body { cursor: none; }
+    a, button, [role="button"] { cursor: none; }
+    .cursor {
+      position: fixed; top: 0; left: 0;
+      width: var(--cursor-size); height: var(--cursor-size);
+      border-radius: 50%;
+      border: 1px solid var(--ink);
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      z-index: 9999;
+      transition: width .25s ease, height .25s ease, border-color .25s ease, background .25s ease;
+      mix-blend-mode: difference;
+      filter: invert(1);
+    }
+    .cursor.hover { width: 36px; height: 36px; }
+    .cursor.dark { border-color: var(--paper); }
+  }
+  .cursor { display: none; }
+
+  /* ────── Type ────── */
+  .display { font-family: var(--serif); font-weight: 400; letter-spacing: -0.012em; line-height: 0.96; }
+  .label { font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+  em, .it { font-style: italic; font-family: var(--serif); }
+  h1, h2, h3, h4 { margin: 0; font-weight: 400; }
+
+  /* ────── Layout ────── */
+  .wrap { max-width: var(--max); margin: 0 auto; padding: 0 var(--gutter); position: relative; }
+  .col  { max-width: var(--col); }
+
+  /* ────── KIN HUD ────── */
+  .hud {
+    position: fixed;
+    top: 50%; right: 18px;
+    transform: translateY(-50%);
+    z-index: 40;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--muted);
+    text-align: right;
+    pointer-events: none;
+    line-height: 2;
+    mix-blend-mode: difference;
+    filter: invert(1) brightness(1.5);
+  }
+  .hud .v { color: var(--ink); font-weight: 500; }
+  .hud .arrow { display: block; margin-top: 12px; }
+  @media (max-width: 900px) { .hud { display: none; } }
+
+  /* ────── Top bar ────── */
+  header.bar {
+    position: fixed; top: 0; left: 0; right: 0;
+    z-index: 50;
+    backdrop-filter: blur(10px);
+    background: color-mix(in oklab, var(--bg) 70%, transparent);
+    border-bottom: 1px solid color-mix(in oklab, var(--rule) 50%, transparent);
+    transition: background .4s, border-color .4s, color .4s;
+  }
+  header.bar.dark {
+    background: color-mix(in oklab, #0c0905 70%, transparent);
+    border-bottom-color: color-mix(in oklab, #fff 8%, transparent);
+    color: var(--paper);
+  }
+  .bar-inner {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    height: 60px;
+  }
+  .mark {
+    font-family: var(--serif);
+    font-size: 22px;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    color: inherit;
+    display: flex; align-items: baseline; gap: 10px;
+  }
+  .mark .star {
+    width: 8px; height: 8px;
+    background: var(--accent);
+    transform: rotate(45deg);
+    display: inline-block;
+  }
+  .nav { display: flex; gap: 28px; justify-content: center; }
+  .nav a {
+    text-decoration: none;
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: inherit; opacity: 0.75;
+    transition: opacity .2s, color .2s;
+  }
+  .nav a:hover { opacity: 1; color: var(--accent); }
+  .bar-right { display: flex; justify-content: flex-end; align-items: center; gap: 14px; }
+  .lang {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase;
+    border: 1px solid currentColor; padding: 6px 12px; border-radius: 999px;
+    background: transparent; color: inherit; opacity: 0.7;
+  }
+  .lang:hover { opacity: 1; color: var(--accent); border-color: var(--accent); }
+  @media (max-width: 720px) {
+    .bar-inner { grid-template-columns: 1fr auto; }
+    .nav { display: none; }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     CHAPTER 0 — INVOCATION
+     ════════════════════════════════════════════════════════════════════ */
+  .invocation {
+    min-height: 100vh;
+    padding-top: 60px;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    position: relative;
+    overflow: hidden;
+  }
+  .invocation::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse at 70% 50%, color-mix(in oklab, var(--east) 18%, transparent), transparent 55%),
+      radial-gradient(ellipse at 20% 80%, color-mix(in oklab, var(--south) 12%, transparent), transparent 55%);
+    pointer-events: none;
+  }
+  .invocation-inner {
+    align-self: end;
+    padding: 0 0 80px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+    position: relative;
+  }
+  .inv-eyebrow {
+    display: flex; align-items: center; gap: 14px;
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .inv-eyebrow .rule { width: 40px; height: 1px; background: var(--accent); }
+
+  .inv-title {
+    font-family: var(--serif);
+    font-size: clamp(72px, 14vw, 240px);
+    line-height: 0.86;
+    letter-spacing: -0.025em;
+    margin: 24px 0 0;
+  }
+  .inv-title .row { display: block; }
+  .inv-title .row.indent { padding-left: 18%; }
+  .inv-title .row.right { text-align: right; }
+  .inv-title .it { color: var(--accent); }
+  .inv-title .ch { display: inline-block; opacity: 0; transform: translateY(0.4em); transition: opacity .9s ease, transform .9s ease; }
+  .inv-title.ready .ch { opacity: 1; transform: none; }
+
+  .inv-bottom {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    gap: 40px;
+    align-items: end;
+    border-top: 1px solid var(--rule);
+    padding: 28px 0 0;
+  }
+  @media (max-width: 900px) {
+    .inv-bottom { grid-template-columns: 1fr; gap: 24px; }
+  }
+  .inv-meta { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); line-height: 1.9; }
+  .inv-meta strong { color: var(--ink); font-weight: 500; }
+
+  .inv-kin {
+    text-align: center;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .inv-kin .seal {
+    width: 132px; height: 132px;
+    position: relative;
+  }
+  .inv-kin .seal canvas { position: absolute; inset: 0; }
+  .inv-kin .kin-name {
+    font-family: var(--serif);
+    font-size: 28px;
+    line-height: 1;
+    letter-spacing: 0.01em;
+  }
+  .inv-kin .kin-tone {
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .inv-cta {
+    text-align: right;
+    display: flex; justify-content: flex-end; align-items: end;
+    gap: 12px;
+  }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 12px;
+    font-family: var(--mono);
+    font-size: 11.5px; letter-spacing: 0.18em; text-transform: uppercase;
+    padding: 16px 22px;
+    border-radius: 999px;
+    text-decoration: none;
+    border: 1px solid var(--ink);
+    background: var(--ink); color: var(--paper);
+    transition: transform .25s, background .25s, border-color .25s, color .25s;
+    will-change: transform;
+  }
+  .btn:hover { background: var(--accent); border-color: var(--accent); }
+  .btn .arr { display: inline-block; transition: transform .25s; }
+  .btn:hover .arr { transform: translateX(4px); }
+  .btn.ghost { background: transparent; color: var(--ink); border-color: var(--rule); }
+  .btn.ghost:hover { color: var(--accent); border-color: var(--accent); background: transparent; }
+
+  /* ────── Chapter gate ────── */
+  .gate {
+    border-top: 1px solid var(--rule);
+    padding: 96px 0 0;
+  }
+  .gate-head {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 40px;
+    align-items: baseline;
+    margin-bottom: 72px;
+  }
+  @media (max-width: 720px) {
+    .gate-head { grid-template-columns: 1fr; gap: 16px; margin-bottom: 40px; }
+  }
+  .gate-num {
+    display: flex; flex-direction: column; gap: 12px;
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .gate-num .roman {
+    font-family: var(--serif);
+    font-size: 36px;
+    color: var(--ink);
+    letter-spacing: 0;
+    font-style: italic;
+  }
+  .gate-num .maya {
+    color: var(--accent);
+    line-height: 1;
+  }
+  .gate-title {
+    font-family: var(--serif);
+    font-size: clamp(40px, 6vw, 76px);
+    line-height: 1.0;
+    letter-spacing: -0.018em;
+    text-wrap: pretty;
+  }
+  .gate-title em { color: var(--accent); }
+
+  /* ────── Threshold ────── */
+  .threshold .body {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 0 120px;
+  }
+  .threshold p {
+    font-family: var(--serif);
+    font-size: clamp(24px, 2.6vw, 34px);
+    line-height: 1.32;
+    color: var(--ink);
+    margin: 0 0 1.1em;
+    text-wrap: pretty;
+  }
+  .threshold p + p { color: var(--ink-soft); font-size: clamp(20px, 2.2vw, 26px); }
+
+  .threshold-glyph {
+    display: flex; justify-content: center; padding: 0 0 80px;
+    color: var(--accent); opacity: 0.8;
+  }
+  .threshold-glyph svg { width: 64px; height: 64px; }
+
+  /* ────── Practitioner ────── */
+  .practitioner {
+    background: var(--west);
+    color: var(--paper);
+    padding: 0;
+    border-top: 1px solid var(--west);
+  }
+  .pract-frame {
+    position: relative;
+    aspect-ratio: 16 / 9;
+    width: 100%;
+    overflow: hidden;
+  }
+  @media (max-width: 720px) { .pract-frame { aspect-ratio: 4 / 5; } }
+  .pract-frame .img {
+    position: absolute; inset: 0;
+    background: url('assets/diana-ceremony.jpeg') center/cover no-repeat;
+    filter: saturate(0.78) contrast(1.04) brightness(0.85);
+    transform: scale(1.05);
+  }
+  .pract-frame .vignette {
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%);
+    pointer-events: none;
+  }
+  .pract-frame .grid {
+    position: absolute; inset: 0; pointer-events: none;
+    background:
+      linear-gradient(to right, rgba(255,255,255,0.06) 1px, transparent 1px) 0 0/16.66% 100%,
+      linear-gradient(to bottom, rgba(255,255,255,0.06) 1px, transparent 1px) 0 0/100% 33.33%;
+    mix-blend-mode: overlay;
+    opacity: 0.5;
+  }
+  .pract-frame .glyph-overlay {
+    position: absolute; inset: 0; pointer-events: none;
+    color: var(--paper); opacity: 0.32;
+    mix-blend-mode: soft-light;
+  }
+  .pract-frame .glyph-overlay svg {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(560px, 80%); height: auto;
+  }
+  .pract-frame .corner {
+    position: absolute; width: 18px; height: 18px;
+    border: 1px solid var(--paper); opacity: 0.7;
+  }
+  .pract-frame .corner.tl { top: 24px; left: 24px; border-right: 0; border-bottom: 0; }
+  .pract-frame .corner.tr { top: 24px; right: 24px; border-left: 0; border-bottom: 0; }
+  .pract-frame .corner.bl { bottom: 24px; left: 24px; border-right: 0; border-top: 0; }
+  .pract-frame .corner.br { bottom: 24px; right: 24px; border-left: 0; border-top: 0; }
+  .pract-frame .archive {
+    position: absolute; left: 32px; bottom: 32px;
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    line-height: 1.8;
+  }
+  .pract-frame .archive .v { color: var(--paper); opacity: 0.95; }
+  .pract-frame .archive .k { opacity: 0.55; }
+  .pract-frame .ar-right {
+    position: absolute; right: 32px; bottom: 32px; text-align: right;
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    line-height: 1.8; opacity: 0.9;
+  }
+
+  .pract-caption {
+    background: var(--west);
+    color: var(--paper);
+    padding: 56px var(--gutter) 96px;
+  }
+  .pract-caption .inner {
+    max-width: var(--max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 64px;
+    align-items: end;
+  }
+  @media (max-width: 900px) { .pract-caption .inner { grid-template-columns: 1fr; gap: 24px; } }
+  .pract-caption h3 {
+    font-family: var(--serif);
+    font-size: clamp(40px, 5vw, 64px);
+    line-height: 1.0;
+    letter-spacing: -0.015em;
+    text-wrap: pretty;
+  }
+  .pract-caption h3 em { color: var(--accent); }
+  .pract-caption p {
+    font-family: var(--serif);
+    font-size: 20px; line-height: 1.45;
+    color: color-mix(in oklab, var(--paper) 80%, transparent);
+    max-width: 44ch; margin: 0;
+  }
+  .pract-caption .label { color: color-mix(in oklab, var(--paper) 60%, transparent); }
+
+  /* ────── Medicines ────── */
+  .medicines { background: var(--bg); }
+  .med-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border-block: 1px solid var(--rule);
+  }
+  @media (max-width: 900px) { .med-grid { grid-template-columns: 1fr; } }
+
+  .med-card {
+    background: var(--bg);
+    padding: 56px 40px 56px;
+    min-height: 560px;
+    display: grid;
+    grid-template-rows: auto 160px auto 1fr auto;
+    gap: 0;
+    position: relative;
+    overflow: hidden;
+    transition: background .4s ease;
+  }
+  .med-card:hover { background: var(--paper); }
+  .med-card .index {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--muted);
+    display: flex; justify-content: space-between;
+  }
+  .med-card .seal {
+    align-self: center; justify-self: center;
+    width: 140px; height: 140px;
+    color: var(--ink);
+  }
+  .med-card .seal .ring { stroke: var(--accent); }
+  .med-card h3 {
+    font-family: var(--serif);
+    font-size: 48px;
+    margin: 24px 0 8px;
+    line-height: 1;
+    letter-spacing: -0.01em;
+  }
+  .med-card .meta {
+    font-family: var(--serif); font-style: italic;
+    color: var(--accent);
+    font-size: 17px;
+    margin-bottom: 20px;
+  }
+  .med-card p {
+    margin: 0;
+    color: var(--ink-soft);
+    font-size: 15.5px; line-height: 1.6;
+  }
+  .med-card .lineage {
+    margin-top: 32px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ────── Arc ────── */
+  .arc {
+    background: var(--bg-2);
+    padding: 140px 0 120px;
+    position: relative;
+    overflow: hidden;
+  }
+  .arc-vis {
+    margin: 80px auto 0;
+    max-width: 1080px;
+    aspect-ratio: 16 / 9;
+    position: relative;
+  }
+  .arc-vis svg { width: 100%; height: 100%; overflow: visible; }
+  .arc-vis .ring { fill: none; stroke: var(--ink); stroke-width: 0.6; }
+  .arc-vis .progress { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linecap: round; }
+  .arc-vis .stop { fill: var(--bg-2); stroke: var(--ink); stroke-width: 1; }
+  .arc-vis .stop.active { fill: var(--accent); stroke: var(--accent); }
+  .arc-vis .stop-label {
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    fill: var(--muted);
+  }
+  .arc-vis .stop-name {
+    font-family: var(--serif);
+    font-size: 26px;
+    fill: var(--ink);
+    letter-spacing: -0.005em;
+  }
+  .arc-vis .stop-name.it { font-style: italic; fill: var(--accent); }
+
+  .arc-ledger {
+    margin: 64px auto 0;
+    max-width: 1080px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+  }
+  @media (max-width: 720px) { .arc-ledger { grid-template-columns: 1fr; } }
+  .arc-ledger .cell {
+    background: var(--bg-2);
+    padding: 28px 28px 32px;
+  }
+  .arc-ledger .cell h4 {
+    font-family: var(--serif);
+    font-size: 24px;
+    margin: 0 0 8px;
+    letter-spacing: -0.005em;
+  }
+  .arc-ledger .cell .dur {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+  .arc-ledger .cell p {
+    font-size: 14.5px; line-height: 1.6; color: var(--ink-soft);
+    margin: 0;
+  }
+
+  /* ────── Day-sign rail ────── */
+  .rail {
+    background: var(--west);
+    color: var(--paper);
+    padding: 72px 0 80px;
+    overflow: hidden;
+  }
+  .rail-head {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 0 var(--gutter);
+    display: flex; justify-content: space-between; align-items: end;
+    margin-bottom: 36px;
+  }
+  .rail-head .lab { color: color-mix(in oklab, var(--paper) 55%, transparent); font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase; }
+  .rail-head h3 {
+    font-family: var(--serif);
+    font-size: clamp(28px, 3.5vw, 40px);
+    line-height: 1;
+    max-width: 30ch;
+    text-wrap: pretty;
+  }
+  .rail-head h3 em { color: var(--accent); }
+  .rail-track {
+    display: flex; gap: 32px; padding: 0 var(--gutter);
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .rail-track::-webkit-scrollbar { display: none; }
+  .ds {
+    flex: 0 0 auto;
+    width: 168px;
+    scroll-snap-align: start;
+    border-top: 1px solid color-mix(in oklab, var(--paper) 25%, transparent);
+    padding-top: 18px;
+    color: color-mix(in oklab, var(--paper) 68%, transparent);
+    transition: color .3s, border-color .3s;
+  }
+  .ds.today {
+    color: var(--paper);
+    border-top-color: var(--accent);
+  }
+  .ds .glyph-box {
+    aspect-ratio: 1 / 1;
+    border: 1px solid color-mix(in oklab, var(--paper) 18%, transparent);
+    background: color-mix(in oklab, #000 35%, transparent);
+    display: grid; place-items: center;
+    margin-bottom: 16px;
+    transition: background .3s, border-color .3s;
+  }
+  .ds.today .glyph-box {
+    background: color-mix(in oklab, var(--accent) 25%, #000 50%);
+    border-color: var(--accent);
+  }
+  .ds .glyph-box svg { width: 64%; height: 64%; color: currentColor; }
+  .ds .num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase; }
+  .ds .name { font-family: var(--serif); font-size: 24px; line-height: 1; margin-top: 6px; letter-spacing: 0.005em; }
+  .ds .meaning { font-family: var(--serif); font-style: italic; font-size: 13px; opacity: 0.8; margin-top: 6px; }
+
+  /* ────── Invocation quote ────── */
+  .invocation-q {
+    padding: 160px var(--gutter) 180px;
+    background: var(--bg);
+    position: relative; overflow: hidden;
+  }
+  .invocation-q .flower {
+    position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: min(880px, 90vw); aspect-ratio: 1 / 1;
+    color: var(--accent); opacity: 0.10;
+    pointer-events: none;
+  }
+  .invocation-q blockquote {
+    margin: 0 auto;
+    max-width: var(--col);
+    text-align: center;
+    position: relative; z-index: 1;
+  }
+  .invocation-q blockquote p {
+    font-family: var(--serif);
+    font-size: clamp(40px, 6vw, 92px);
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    margin: 0;
+  }
+  .invocation-q blockquote p em { color: var(--accent); }
+  .invocation-q figcaption {
+    margin-top: 48px;
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ────── Offering ────── */
+  .offering { padding: 140px 0; }
+  .off-grid {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 0 var(--gutter);
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: 80px;
+    align-items: end;
+  }
+  @media (max-width: 900px) { .off-grid { grid-template-columns: 1fr; gap: 48px; } }
+  .off-image {
+    aspect-ratio: 4 / 5;
+    background: var(--bg-2);
+    position: relative;
+    overflow: hidden;
+  }
+  .off-image .placeholder {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    color: var(--muted);
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    border: 1px dashed var(--rule);
+    text-align: center;
+    padding: 24px;
+  }
+  .off-image .corner { position: absolute; width: 14px; height: 14px; border: 1px solid var(--ink); opacity: 0.5; }
+  .off-image .corner.tl { top: 14px; left: 14px; border-right: 0; border-bottom: 0; }
+  .off-image .corner.br { bottom: 14px; right: 14px; border-left: 0; border-top: 0; }
+  .off-body h3 {
+    font-family: var(--serif);
+    font-size: clamp(40px, 5.5vw, 76px);
+    line-height: 1.0;
+    letter-spacing: -0.02em;
+    margin: 24px 0 32px;
+    text-wrap: pretty;
+  }
+  .off-body h3 em { color: var(--accent); }
+  .off-body p {
+    font-size: 17.5px; line-height: 1.6; color: var(--ink-soft);
+    max-width: 50ch; margin: 0 0 28px;
+  }
+  .off-list {
+    margin: 36px 0 0;
+    padding: 0;
+    list-style: none;
+    border-top: 1px solid var(--rule);
+  }
+  .off-list li {
+    display: grid;
+    grid-template-columns: 36px 1fr auto;
+    gap: 24px;
+    align-items: baseline;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--rule);
+    font-family: var(--serif);
+    font-size: 22px;
+  }
+  .off-list .n {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em;
+    color: var(--accent);
+  }
+  .off-list .dur {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--muted);
+  }
+  .off-list .desc {
+    font-family: var(--serif);
+    font-style: italic;
+    color: var(--ink-soft);
+    font-size: 17px;
+    display: block;
+    margin-top: 4px;
+  }
+
+  /* ────── Care ────── */
+  .care-wrap {
+    padding: 0 var(--gutter) 140px;
+    max-width: var(--max);
+    margin: 0 auto;
+  }
+  .care {
+    border: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 48px 56px 56px;
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    gap: 48px;
+    position: relative;
+  }
+  @media (max-width: 720px) {
+    .care { grid-template-columns: 1fr; padding: 28px; gap: 16px; }
+  }
+  .care::before {
+    content: "";
+    position: absolute; top: 0; left: 56px; right: 56px;
+    height: 1px; background: var(--accent);
+    transform: translateY(-0.5px);
+  }
+  .care .care-label {
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: var(--accent);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .care .care-label::before {
+    content: ""; width: 8px; height: 8px;
+    background: var(--accent);
+    transform: rotate(45deg);
+  }
+  .care h4 {
+    font-family: var(--serif);
+    font-size: 32px;
+    margin: 0 0 16px;
+    line-height: 1.15;
+  }
+  .care p {
+    margin: 0 0 14px;
+    color: var(--ink-soft);
+    font-size: 16px; line-height: 1.6;
+    max-width: 64ch;
+  }
+  .care .small {
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--muted);
+    margin-top: 24px;
+    display: flex; gap: 24px; flex-wrap: wrap;
+  }
+  .care .small span::before { content: "→ "; color: var(--accent); }
+
+  /* ────── Inquire ────── */
+  .inquire {
+    background: var(--west);
+    color: var(--paper);
+    padding: 160px var(--gutter) 120px;
+  }
+  .inquire .inner {
+    max-width: var(--max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 80px;
+    align-items: end;
+  }
+  @media (max-width: 900px) { .inquire .inner { grid-template-columns: 1fr; gap: 40px; } }
+  .inquire .label { color: color-mix(in oklab, var(--paper) 55%, transparent); }
+  .inquire h2 {
+    font-family: var(--serif);
+    font-size: clamp(64px, 11vw, 184px);
+    line-height: 0.92;
+    letter-spacing: -0.025em;
+    margin: 32px 0 0;
+  }
+  .inquire h2 em { color: var(--accent); }
+  .inquire p {
+    font-family: var(--serif);
+    font-size: 22px; line-height: 1.45;
+    color: color-mix(in oklab, var(--paper) 80%, transparent);
+    max-width: 38ch;
+  }
+  .inquire dl {
+    margin: 32px 0 0;
+    display: grid;
+    grid-template-columns: 130px 1fr;
+    gap: 14px 32px;
+    font-family: var(--mono);
+    font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  .inquire dt { color: color-mix(in oklab, var(--paper) 50%, transparent); }
+  .inquire dd { margin: 0; color: var(--paper); }
+  .inquire dd a { text-decoration: none; border-bottom: 1px solid color-mix(in oklab, var(--paper) 20%, transparent); padding-bottom: 1px; }
+  .inquire dd a:hover { color: var(--accent); border-color: var(--accent); }
+  .inquire .btn { margin-top: 36px; background: var(--paper); color: var(--ink); border-color: var(--paper); }
+  .inquire .btn:hover { background: var(--accent); border-color: var(--accent); color: var(--paper); }
+
+  /* ────── Footer ────── */
+  footer.foot {
+    background: var(--west);
+    color: color-mix(in oklab, var(--paper) 70%, transparent);
+    padding: 56px var(--gutter) 64px;
+    border-top: 1px solid color-mix(in oklab, var(--paper) 10%, transparent);
+  }
+  .foot-inner {
+    max-width: var(--max);
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+    gap: 48px;
+    font-family: var(--mono);
+    font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase;
+  }
+  @media (max-width: 720px) { .foot-inner { grid-template-columns: 1fr 1fr; gap: 32px; } }
+  .foot-inner h5 { color: var(--paper); margin: 0 0 14px; font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.22em; font-weight: 500; }
+  .foot-inner ul { list-style: none; padding: 0; margin: 0; line-height: 2; }
+  .foot-inner a { color: inherit; text-decoration: none; opacity: 0.8; }
+  .foot-inner a:hover { color: var(--accent); opacity: 1; }
+  .foot-bottom {
+    max-width: var(--max);
+    margin: 64px auto 0;
+    padding-top: 24px;
+    border-top: 1px solid color-mix(in oklab, var(--paper) 10%, transparent);
+    display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 10px; letter-spacing: 0.2em; text-transform: uppercase;
+    color: color-mix(in oklab, var(--paper) 50%, transparent);
+  }
+  .foot-bottom .bear { color: var(--paper); }
+
+  /* ────── Reveal animation ────── */
+  .reveal { opacity: 0; transform: translateY(18px); transition: opacity 1s ease, transform 1s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+  .reveal.delay-1 { transition-delay: 0.12s; }
+  .reveal.delay-2 { transition-delay: 0.24s; }
+  .reveal.delay-3 { transition-delay: 0.36s; }
+</style>
+</head>
+<body>
+
+<div class="cursor" id="cursor"></div>
+
+<aside class="hud" aria-hidden="true">
+  <div>Kin <span class="v" id="hud-kin">—</span> / 260</div>
+  <div>Tone <span class="v" id="hud-tone">—</span></div>
+  <div>Sign <span class="v" id="hud-sign">—</span></div>
+  <div>Chapter <span class="v" id="hud-chapter">00</span></div>
+  <span class="arrow">↓ Descend</span>
+</aside>
+
+<header class="bar" id="bar">
+  <div class="wrap bar-inner">
+    <a class="mark" href="#top">
+      <span class="star"></span>
+      <span>Diana Buergin</span>
+    </a>
+    <nav class="nav">
+      <a href="#threshold">Threshold</a>
+      <a href="#practitioner">The Practitioner</a>
+      <a href="#medicines">Medicines</a>
+      <a href="#arc">The Arc</a>
+      <a href="#inquire">Inquire</a>
+    </nav>
+    <div class="bar-right">
+      <button class="lang" id="lang">EN · DE</button>
+    </div>
+  </div>
+</header>
+
+<!-- CHAPTER 0 — INVOCATION -->
+<section class="invocation" id="top">
+  <div class="wrap invocation-inner">
+    <div>
+      <div class="inv-eyebrow">
+        <span class="rule"></span>
+        <span>Practice of Return · Frankfurt — Koh Phangan · Est. <span id="founded-year">2025</span></span>
+      </div>
+
+      <h1 class="inv-title display" id="title">
+        <span class="row">Return</span>
+        <span class="row indent">to the <span class="it">body.</span></span>
+        <span class="row right">Clear the old.</span>
+        <span class="row">Remember <span class="it">the sacred</span></span>
+        <span class="row indent">within.</span>
+      </h1>
+    </div>
+
+    <div class="inv-bottom">
+      <div class="inv-meta">
+        <div><strong>Kambo</strong></div>
+        <div><strong>Embodied tantra</strong></div>
+        <div><strong>Spiritual healing</strong></div>
+      </div>
+
+      <div class="inv-kin">
+        <div class="seal" id="kin-seal">
+          <canvas width="264" height="264"></canvas>
+        </div>
+        <div>
+          <div class="kin-name" id="kin-name-big">—</div>
+          <div class="kin-tone" id="kin-tone-big">Today's kin</div>
+        </div>
+      </div>
+
+      <div class="inv-cta">
+        <a href="#inquire" class="btn" data-magnetic>Begin <span class="arr">→</span></a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER I — THE THRESHOLD -->
+<section class="gate threshold" id="threshold" data-chapter="01">
+  <div class="wrap">
+    <header class="gate-head">
+      <div class="gate-num">
+        <div class="maya" aria-hidden="true">
+          <svg width="48" height="20" viewBox="0 0 48 20" fill="currentColor"><circle cx="24" cy="10" r="4"/></svg>
+        </div>
+        <div class="roman">i.</div>
+        <div>Gate of opening</div>
+      </div>
+      <h2 class="gate-title display reveal">
+        Before the work begins, <em>a threshold.</em>
+      </h2>
+    </header>
+
+    <div class="body">
+      <p class="reveal">
+        Diana Bürgin is a German conscious entrepreneur, Kambo practitioner,
+        shamanic guide, and tantra teacher. She lives between
+        <em>Frankfurt am Main</em> and <em>Koh Phangan</em> — a polarity
+        that shapes the practice.
+      </p>
+      <p class="reveal delay-1">
+        A graduate in International Business (Northumbria University and
+        accadis Business School), she trained as a brand strategist at
+        OgilvyBrains and the Peter Schmidt Group before stepping into her
+        own work. She is the founder of <em>Glowed.me</em> — the
+        Frankfurt-born beauty house honored as Best Beauty Newcomer at the
+        2024 Look! Beauty Awards — and of the brand consultancy
+        <em>Elevate Brands.</em>
+      </p>
+      <p class="reveal delay-2">
+        Across more than a decade of building, her work has consistently
+        centered self-love, feminine confidence, authenticity, and the
+        return to one's own radiance. The ceremonial practice now carries
+        those currents <em>inward</em> — from outer beauty into the
+        deeper field where the body becomes the teacher.
+      </p>
+    </div>
+
+    <div class="threshold-glyph reveal">
+      <svg viewBox="-32 -32 64 64" fill="none" stroke="currentColor" stroke-width="0.7">
+        <circle r="28"/>
+        <circle r="20"/>
+        <path d="M-12 18 L-12 -8 Q -12 -16 0 -16 Q 12 -16 12 -8 L12 18 Z"/>
+        <line x1="0" y1="-8" x2="0" y2="18"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER II — THE PRACTITIONER -->
+<section class="practitioner" id="practitioner" data-chapter="02" data-dark>
+  <div class="pract-frame">
+    <div class="img"></div>
+    <div class="grid"></div>
+    <div class="vignette"></div>
+    <div class="glyph-overlay">
+      <svg viewBox="-100 -100 200 200" fill="none" stroke="currentColor" stroke-width="0.5">
+        <circle r="92" />
+        <circle r="74" />
+        <circle r="56" />
+        <circle r="38" />
+        <circle r="20" />
+        <g stroke-dasharray="1.5 4">
+          <line x1="-92" y1="0" x2="92" y2="0"/>
+          <line x1="0" y1="-92" x2="0" y2="92"/>
+          <line x1="-65" y1="-65" x2="65" y2="65"/>
+          <line x1="-65" y1="65" x2="65" y2="-65"/>
+        </g>
+      </svg>
+    </div>
+    <span class="corner tl"></span>
+    <span class="corner tr"></span>
+    <span class="corner bl"></span>
+    <span class="corner br"></span>
+    <div class="archive">
+      <div class="k">Subject</div>
+      <div class="v">Diana Bürgin · in ceremony</div>
+      <div class="k" style="margin-top:8px;">Between</div>
+      <div class="v">Frankfurt am Main · Koh Phangan</div>
+    </div>
+    <div class="ar-right">
+      <div>Plate 02</div>
+      <div>—</div>
+      <div>Frame 16:9</div>
+    </div>
+  </div>
+
+  <div class="pract-caption">
+    <div class="inner">
+      <div>
+        <div class="label">02 — The Practitioner</div>
+        <h3 class="reveal">From outer beauty <em>into the deeper field</em> where the body becomes the teacher.</h3>
+      </div>
+      <p class="reveal delay-1">
+        Through Kambo ceremony, tantra-based embodiment, and intuitive
+        spiritual guidance, Diana holds a refined container for women in
+        transition, seekers, and conscious individuals ready to meet
+        themselves more honestly — a movement from performance into
+        presence, from accumulated tension into a more truthful
+        relationship with the self.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER III — THE THREE MEDICINES -->
+<section class="gate medicines" id="medicines" data-chapter="03">
+  <div class="wrap">
+    <header class="gate-head">
+      <div class="gate-num">
+        <div class="maya" aria-hidden="true">
+          <svg width="48" height="20" viewBox="0 0 48 20" fill="currentColor">
+            <circle cx="14" cy="10" r="4"/><circle cx="24" cy="10" r="4"/><circle cx="34" cy="10" r="4"/>
+          </svg>
+        </div>
+        <div class="roman">iii.</div>
+        <div>The three medicines</div>
+      </div>
+      <h2 class="gate-title display reveal">
+        Three doorways into the same <em>field</em> — the body as altar.
+      </h2>
+    </header>
+  </div>
+
+  <div class="med-grid">
+    <article class="med-card reveal">
+      <div class="index"><span>i.</span><span>kambo</span></div>
+      <svg class="seal" viewBox="-32 -32 64 64" fill="none" stroke="currentColor" stroke-width="0.7">
+        <circle class="ring" r="28" stroke-width="1"/>
+        <circle r="22"/>
+        <circle r="15"/>
+        <circle r="8" fill="currentColor" stroke="none" opacity="0.85"/>
+        <g stroke-dasharray="1 3">
+          <line x1="-28" y1="0" x2="28" y2="0"/>
+          <line x1="0" y1="-28" x2="0" y2="28"/>
+        </g>
+        <g fill="currentColor">
+          <circle cx="0" cy="-24" r="1.6"/><circle cx="24" cy="0" r="1.6"/>
+          <circle cx="0" cy="24" r="1.6"/><circle cx="-24" cy="0" r="1.6"/>
+          <circle cx="17" cy="-17" r="1.2"/><circle cx="17" cy="17" r="1.2"/>
+          <circle cx="-17" cy="-17" r="1.2"/><circle cx="-17" cy="17" r="1.2"/>
+        </g>
+      </svg>
+      <h3>Kambo</h3>
+      <div class="meta">A ceremony of cleansing &amp; renewal</div>
+      <p>
+        A traditional process involving <em>Phyllomedusa bicolor</em>,
+        long associated with cleansing, resilience, and the return of life
+        force. Held with thorough preparation, health screening, informed
+        consent, and integration on the other side.
+      </p>
+      <div class="lineage">Lineage · Matsés · Katukina</div>
+    </article>
+
+    <article class="med-card reveal delay-1">
+      <div class="index"><span>ii.</span><span>tantra</span></div>
+      <svg class="seal" viewBox="-32 -32 64 64" fill="none" stroke="currentColor" stroke-width="0.7">
+        <circle class="ring" r="28" stroke-width="1"/>
+        <polygon points="0,-22 19,11 -19,11"/>
+        <polygon points="0,22 19,-11 -19,-11"/>
+        <polygon points="0,-14 12,7 -12,7"/>
+        <polygon points="0,14 12,-7 -12,-7"/>
+        <polygon points="0,-7 6,3.5 -6,3.5"/>
+        <polygon points="0,7 6,-3.5 -6,-3.5"/>
+        <circle r="3" fill="currentColor" stroke="none"/>
+      </svg>
+      <h3>Tantra</h3>
+      <div class="meta">A path of embodied presence</div>
+      <p>
+        With deep roots in South Asian spiritual traditions, tantra honors
+        the body as a vessel of presence, vitality, intimacy, and
+        intelligence. Taught here with reverence, precision, and
+        unambiguous consent.
+      </p>
+      <div class="lineage">Lineage · Kashmir Shaivism · Sahaja</div>
+    </article>
+
+    <article class="med-card reveal delay-2">
+      <div class="index"><span>iii.</span><span>healing space</span></div>
+      <svg class="seal" viewBox="-32 -32 64 64" fill="none" stroke="currentColor" stroke-width="0.7">
+        <circle class="ring" r="28" stroke-width="1"/>
+        <path d="M-20 20 L-20 -10 L-8 -10 L-8 -20 L20 -20 L20 12 L8 12 L8 20 Z"/>
+        <path d="M-12 12 L-12 -2 L0 -2 L0 -12 L12 -12 L12 4 L0 4 L0 12 Z"/>
+        <circle r="2.5" fill="currentColor" stroke="none"/>
+      </svg>
+      <h3>Healing Space</h3>
+      <div class="meta">A grounded container for integration</div>
+      <p>
+        A calm, deliberate vessel for release, self-responsibility,
+        emotional integration, and reconnection with the wisdom of the
+        body. The work continues long after the ceremony ends.
+      </p>
+      <div class="lineage">Lineage · Somatic · Shamanic</div>
+    </article>
+  </div>
+</section>
+
+<!-- CHAPTER IV — THE ARC -->
+<section class="gate arc" id="arc" data-chapter="04" style="border-top:none;">
+  <div class="wrap">
+    <header class="gate-head">
+      <div class="gate-num">
+        <div class="maya" aria-hidden="true">
+          <svg width="48" height="20" viewBox="0 0 48 20" fill="currentColor">
+            <circle cx="9" cy="10" r="4"/><circle cx="19" cy="10" r="4"/>
+            <circle cx="29" cy="10" r="4"/><circle cx="39" cy="10" r="4"/>
+          </svg>
+        </div>
+        <div class="roman">iv.</div>
+        <div>The arc</div>
+      </div>
+      <h2 class="gate-title display reveal">
+        A ceremony is a <em>small sacred round</em> — preparation, ceremony, return.
+      </h2>
+    </header>
+
+    <div class="arc-vis reveal" id="arc-vis">
+      <svg viewBox="0 0 1080 540" preserveAspectRatio="xMidYMid meet">
+        <path id="arc-ring" class="ring" d="M 80 460 A 460 460 0 0 1 1000 460" />
+        <path id="arc-progress" class="progress" d="M 80 460 A 460 460 0 0 1 1000 460" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>
+        <g id="arc-stops"></g>
+      </svg>
+    </div>
+
+    <div class="arc-ledger">
+      <div class="cell reveal">
+        <div class="dur">7 days before</div>
+        <h4>Preparation</h4>
+        <p>Intake conversation. Health screening. Quiet diet, gentle movement, intention-setting. The body is asked, not surprised.</p>
+      </div>
+      <div class="cell reveal delay-1">
+        <div class="dur">A single day</div>
+        <h4>Ceremony</h4>
+        <p>The container opens. Kambo ritual or embodied tantra session, held with steady attention and the practitioner's full presence.</p>
+      </div>
+      <div class="cell reveal delay-2">
+        <div class="dur">21 days after</div>
+        <h4>Integration</h4>
+        <p>Rest, reflection, follow-up. The medicine continues to work; the practice is to keep listening as it does.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER V — DAY-SIGN RAIL -->
+<section class="rail" id="signs" data-chapter="05" data-dark>
+  <div class="rail-head">
+    <div>
+      <div class="lab">05 — Sacred round</div>
+      <h3 class="display">Twenty <em>day-signs</em>. Thirteen tones.<br/>Two hundred sixty days of return.</h3>
+    </div>
+    <div class="lab">→ Scroll the rail</div>
+  </div>
+  <div class="rail-track" id="rail-track"></div>
+</section>
+
+<!-- CHAPTER VI — INVOCATION QUOTE -->
+<section class="invocation-q" id="words" data-chapter="06">
+  <svg class="flower" id="flower" viewBox="-100 -100 200 200" fill="none" stroke="currentColor" stroke-width="0.4" aria-hidden="true"></svg>
+  <figure>
+    <blockquote>
+      <p class="reveal">
+        Return to the body. Clear the old.<br/>
+        <em>Remember the sacred</em> within.
+      </p>
+    </blockquote>
+    <figcaption>— Diana Buergin · Practice of Return</figcaption>
+  </figure>
+</section>
+
+<!-- CHAPTER VII — THE OFFERING -->
+<section class="gate offering" id="offering" data-chapter="07" style="padding:140px 0;">
+  <div class="off-grid">
+    <div class="off-image reveal">
+      <div class="placeholder">Ceremonial space / altar</div>
+      <span class="corner tl"></span>
+      <span class="corner br"></span>
+    </div>
+    <div class="off-body">
+      <div class="label">07 — The signature offering</div>
+      <h3 class="reveal">A single arc. <em>Privately held.</em></h3>
+      <p class="reveal delay-1">
+        Each container is designed end-to-end to support clarity, energetic
+        release, emotional presence, and a deeper remembrance of the self.
+        Whether held one-to-one or with a small group, the rhythm is
+        the same: arrive, soften, surrender, return.
+      </p>
+
+      <ol class="off-list">
+        <li class="reveal">
+          <span class="n">01</span>
+          <span>Preparation
+            <span class="desc">Intake, screening, intention-setting.</span>
+          </span>
+          <span class="dur">7 days</span>
+        </li>
+        <li class="reveal delay-1">
+          <span class="n">02</span>
+          <span>Ceremony
+            <span class="desc">Kambo ritual · embodied tantra · holding.</span>
+          </span>
+          <span class="dur">1 day</span>
+        </li>
+        <li class="reveal delay-2">
+          <span class="n">03</span>
+          <span>Integration
+            <span class="desc">Rest, reflection, follow-up conversation.</span>
+          </span>
+          <span class="dur">21 days</span>
+        </li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER VIII — CARE -->
+<section class="care-wrap" id="care" data-chapter="08">
+  <div class="care reveal">
+    <div>
+      <span class="care-label">A care note</span>
+    </div>
+    <div>
+      <h4>Kambo is intense practice. Please read carefully.</h4>
+      <p>
+        Kambo has documented physiological effects and risks. It is
+        <em>not</em> a medical treatment, and is not a substitute for
+        medical or psychological care.
+      </p>
+      <p>
+        Participation requires honest health screening, informed consent,
+        and an awareness of contraindications. If you are unsure whether
+        the practice is right for you at this moment, please reach out —
+        sometimes the most honoring answer is <em>not yet.</em>
+      </p>
+      <div class="small">
+        <span>Health screening required</span>
+        <span>Informed consent</span>
+        <span>Not a medical treatment</span>
+        <span>Refs · Sci. Reports · Healthline</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CHAPTER IX — INQUIRE -->
+<section class="inquire" id="inquire" data-chapter="09" data-dark>
+  <div class="inner">
+    <div>
+      <div class="label">09 — Begin</div>
+      <h2 class="display reveal">Write to <em>Diana.</em></h2>
+    </div>
+    <div>
+      <p class="reveal delay-1">
+        Sessions are by inquiry only. Please share a few sentences about
+        where you are, what is calling you, and how you came to this work.
+      </p>
+      <dl class="reveal delay-2">
+        <dt>Email</dt>      <dd><a href="mailto:hello@dianabuergin.com">hello@dianabuergin.com</a></dd>
+        <dt>Location</dt>   <dd>Frankfurt — Koh Phangan</dd>
+        <dt>Languages</dt>  <dd>Deutsch · English</dd>
+        <dt>Response</dt>   <dd>Within 5 days</dd>
+        <dt>Held</dt>       <dd>1:1 · Small group · Retreat</dd>
+      </dl>
+      <a class="btn reveal delay-3" href="mailto:hello@dianabuergin.com" data-magnetic>
+        Open inquiry email <span class="arr">→</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer class="foot" data-dark>
+  <div class="foot-inner">
+    <div>
+      <h5>Diana Bürgin</h5>
+      <p style="margin:0; line-height:1.7;">Founder of Glowed.me · Elevate Brands. A practice of return — Kambo, embodied tantra, and spiritual healing held in the rhythm of the sacred round.</p>
+    </div>
+    <div>
+      <h5>Practice</h5>
+      <ul>
+        <li><a href="#threshold">Threshold</a></li>
+        <li><a href="#medicines">Medicines</a></li>
+        <li><a href="#arc">The arc</a></li>
+        <li><a href="#offering">Offering</a></li>
+      </ul>
+    </div>
+    <div>
+      <h5>Care</h5>
+      <ul>
+        <li><a href="#care">Care note</a></li>
+        <li><a href="#">Contraindications</a></li>
+        <li><a href="#">Privacy</a></li>
+      </ul>
+    </div>
+    <div>
+      <h5>Today</h5>
+      <ul>
+        <li>Kin <span id="foot-kin">—</span> / 260</li>
+        <li>Sign <span id="foot-sign">—</span></li>
+        <li>Tone <span id="foot-tone">—</span></li>
+        <li>Year-bearer <span class="bear" id="foot-bear">—</span></li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot-bottom">
+    <span>© <span id="foot-year">2026</span> · Diana Bürgin · Frankfurt — Koh Phangan</span>
+    <span>Practice of return · Sacred round · Quiet hours</span>
+  </div>
+</footer>
+
+<script>
+(function () {
+  /* ─────────────────────────────────────────────────────────────────────
+     TZOLK'IN — Maya day-count engine
+     20 day-signs, 13 tones, 260-day cycle.
+     GMT correlation constant 584283 (most widely accepted).
+  ───────────────────────────────────────────────────────────────────────── */
+  const SIGNS = [
+    { name: "Imix",     meaning: "primordial sea",  glyph: "M0 -10 C 8 -10 10 -2 0 6 C -10 -2 -8 -10 0 -10 Z M-3 -2 H3 V2 H-3 Z" },
+    { name: "Ik'",      meaning: "wind, breath",    glyph: "M-7 -8 H7 V-3 H2 V8 H-2 V-3 H-7 Z" },
+    { name: "Ak'b'al",  meaning: "house, night",    glyph: "M-9 -9 H9 V9 H-9 Z M-4 -4 H4 V4 H-4 Z" },
+    { name: "K'an",     meaning: "seed, ripening",  glyph: "M0 -10 L10 0 L0 10 L-10 0 Z M-3 0 H3" },
+    { name: "Chikchan", meaning: "serpent",         glyph: "M-9 -6 Q -3 -10 0 0 Q 3 10 9 -6" },
+    { name: "Kimi",     meaning: "transformation",  glyph: "M-7 -7 L7 7 M7 -7 L-7 7 M-9 0 H9" },
+    { name: "Manik'",   meaning: "deer, hand",      glyph: "M-8 6 Q 0 -12 8 6 M-3 -2 H3" },
+    { name: "Lamat",    meaning: "star, venus",     glyph: "M0 -10 L2.5 -2.5 L10 0 L2.5 2.5 L0 10 L-2.5 2.5 L-10 0 L-2.5 -2.5 Z" },
+    { name: "Muluk",    meaning: "water, offering", glyph: "M0 -10 C 9 0 9 10 0 10 C -9 10 -9 0 0 -10 Z" },
+    { name: "Ok",       meaning: "dog, guide",      glyph: "M-7 -6 H7 V0 H3 V7 H-3 V0 H-7 Z" },
+    { name: "Chuwen",   meaning: "thread of life",  glyph: "M-8 -8 H8 V8 H-8 Z M0 -8 V8 M-8 0 H8" },
+    { name: "Eb'",      meaning: "human path",      glyph: "M-9 7 Q -5 -8 0 0 Q 5 8 9 -7" },
+    { name: "B'en",     meaning: "reed, growing",   glyph: "M-2 -10 H2 V10 H-2 Z M-8 -10 H8 V-7 H-8 Z" },
+    { name: "Ix",       meaning: "jaguar",          glyph: "M-8 -8 L0 0 L8 -8 M-8 8 L0 0 L8 8" },
+    { name: "Men",      meaning: "eagle, vision",   glyph: "M-10 4 Q 0 -10 10 4 M-4 0 Q 0 -4 4 0" },
+    { name: "K'ib'",    meaning: "wisdom, candle",  glyph: "M-8 -8 H8 V8 H-8 Z M-3 -3 H3 V3 H-3 Z" },
+    { name: "Kab'an",   meaning: "earth, motion",   glyph: "M-9 0 Q -4.5 -9 0 0 Q 4.5 9 9 0" },
+    { name: "Etz'nab'", meaning: "obsidian mirror", glyph: "M0 -10 L8 0 L0 10 L-8 0 Z M0 -6 L0 6" },
+    { name: "Kawak",    meaning: "storm",           glyph: "M-8 4 Q -8 -8 0 -6 Q 8 -8 8 4 Q 0 7 -8 4 Z" },
+    { name: "Ajaw",     meaning: "sun, lord",       glyph: "M0 -10 C 10 -3 7 10 0 7 C -7 10 -10 -3 0 -10 Z M-2 -2 H2 V2 H-2 Z" }
+  ];
+
+  function julianDay(date) {
+    const Y = date.getUTCFullYear();
+    const M = date.getUTCMonth() + 1;
+    const D = date.getUTCDate();
+    const a = Math.floor((14 - M) / 12);
+    const y = Y + 4800 - a;
+    const m = M + 12 * a - 3;
+    return D + Math.floor((153 * m + 2) / 5) + 365 * y +
+           Math.floor(y / 4) - Math.floor(y / 100) + Math.floor(y / 400) - 32045;
+  }
+  function tzolkin(date) {
+    const JD = julianDay(date);
+    const days = JD - 584283;
+    const t0 = 4, s0 = 19;
+    const tt = ((days + t0 - 1) % 13 + 13) % 13 + 1;
+    const ss = ((days + s0) % 20 + 20) % 20;
+    let kn = -1;
+    for (let i = 0; i < 260; i++) {
+      const ti = ((i) % 13) + 1;
+      const si = (i) % 20;
+      if (ti === tt && si === ss) { kn = i + 1; break; }
+    }
+    return { tone: tt, signIdx: ss, sign: SIGNS[ss], kin: kn > 0 ? kn : 1 };
+  }
+  function yearBearer(date) {
+    const bearers = ["K'an", "Muluk", "Ix", "Kawak"];
+    return bearers[date.getUTCFullYear() % 4];
+  }
+
+  const today = new Date();
+  const tk = tzolkin(today);
+  const bearer = yearBearer(today);
+
+  const TONE_MEANINGS = [
+    "Magnetic / unity", "Lunar / polarity", "Electric / activate",
+    "Self-existing / form", "Overtone / radiance", "Rhythmic / equality",
+    "Resonant / channel", "Galactic / harmony", "Solar / intent",
+    "Planetary / manifest", "Spectral / dissolve", "Crystal / cooperation",
+    "Cosmic / endurance"
+  ];
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('hud-kin',  String(tk.kin).padStart(3, '0'));
+  set('hud-tone', String(tk.tone).padStart(2, '0'));
+  set('hud-sign', tk.sign.name);
+  set('foot-kin', String(tk.kin).padStart(3, '0'));
+  set('foot-sign', tk.sign.name);
+  set('foot-tone', `${tk.tone} · ${TONE_MEANINGS[tk.tone-1].split(' / ')[0]}`);
+  set('foot-bear', bearer);
+  set('foot-year', today.getFullYear());
+  set('kin-name-big', `${tk.tone} · ${tk.sign.name}`);
+  set('kin-tone-big', `${TONE_MEANINGS[tk.tone-1]} · today`);
+
+  /* ─── Kin seal canvas ─── */
+  (function drawKinSeal() {
+    const wrap = document.getElementById('kin-seal');
+    if (!wrap) return;
+    const canvas = wrap.querySelector('canvas');
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height;
+    const cx = W / 2, cy = H / 2;
+    const rOuter = 120;
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#1f4034';
+    const ink = getComputedStyle(document.documentElement).getPropertyValue('--ink').trim() || '#0c0e0c';
+
+    let theta = 0;
+    function frame() {
+      ctx.clearRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(theta * 0.05);
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, rOuter, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 20; i++) {
+        const a = (i / 20) * Math.PI * 2 - Math.PI / 2;
+        const x1 = Math.cos(a) * (rOuter - 8), y1 = Math.sin(a) * (rOuter - 8);
+        const x2 = Math.cos(a) * rOuter, y2 = Math.sin(a) * rOuter;
+        ctx.strokeStyle = i === tk.signIdx ? accent : ink;
+        ctx.lineWidth = i === tk.signIdx ? 2 : 0.6;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(-theta * 0.08);
+      const rMid = 86;
+      ctx.strokeStyle = ink;
+      ctx.lineWidth = 0.4;
+      ctx.beginPath();
+      ctx.arc(0, 0, rMid, 0, Math.PI * 2);
+      ctx.stroke();
+      for (let i = 0; i < 13; i++) {
+        const a = (i / 13) * Math.PI * 2 - Math.PI / 2;
+        const x = Math.cos(a) * rMid, y = Math.sin(a) * rMid;
+        ctx.fillStyle = (i + 1) === tk.tone ? accent : ink;
+        ctx.beginPath();
+        ctx.arc(x, y, (i + 1) === tk.tone ? 4 : 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(2.8, 2.8);
+      ctx.strokeStyle = accent;
+      ctx.fillStyle = accent;
+      ctx.lineWidth = 0.4;
+      const p = new Path2D(tk.sign.glyph);
+      ctx.stroke(p);
+      ctx.restore();
+
+      theta += 1;
+      requestAnimationFrame(frame);
+    }
+    frame();
+  })();
+
+  /* ─── Title letter-by-letter reveal ─── */
+  (function () {
+    const title = document.getElementById('title');
+    if (!title) return;
+    const rows = title.querySelectorAll('.row');
+    rows.forEach(row => {
+      const html = row.innerHTML;
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const walk = (node) => {
+        const out = document.createDocumentFragment();
+        node.childNodes.forEach(child => {
+          if (child.nodeType === 3) {
+            const text = child.nodeValue;
+            for (const ch of text) {
+              const span = document.createElement('span');
+              span.className = 'ch';
+              span.textContent = ch === ' ' ? ' ' : ch;
+              out.appendChild(span);
+            }
+          } else if (child.nodeType === 1) {
+            const clone = child.cloneNode(false);
+            clone.appendChild(walk(child));
+            out.appendChild(clone);
+          }
+        });
+        return out;
+      };
+      const frag = walk(tmp);
+      row.innerHTML = '';
+      row.appendChild(frag);
+    });
+    const chars = title.querySelectorAll('.ch');
+    chars.forEach((c, i) => { c.style.transitionDelay = (0.02 * i + 0.2).toFixed(2) + 's'; });
+    requestAnimationFrame(() => title.classList.add('ready'));
+  })();
+
+  /* ─── Day-sign rail ─── */
+  (function () {
+    const track = document.getElementById('rail-track');
+    if (!track) return;
+    track.innerHTML = SIGNS.map((s, i) => `
+      <article class="ds${i === tk.signIdx ? ' today' : ''}">
+        <div class="glyph-box">
+          <svg viewBox="-12 -12 24 24" fill="none" stroke="currentColor" stroke-width="0.8"><path d="${s.glyph}"/></svg>
+        </div>
+        <div class="num">${String(i+1).padStart(2,'0')}${i === tk.signIdx ? ' · today' : ''}</div>
+        <div class="name">${s.name}</div>
+        <div class="meaning">${s.meaning}</div>
+      </article>
+    `).join('');
+    requestAnimationFrame(() => {
+      const today = track.querySelector('.ds.today');
+      if (today) {
+        const left = today.offsetLeft - 80;
+        track.scrollTo({ left, behavior: 'smooth' });
+      }
+    });
+  })();
+
+  /* ─── Flower of life ─── */
+  (function () {
+    const flower = document.getElementById('flower');
+    if (!flower) return;
+    const ns = 'http://www.w3.org/2000/svg';
+    const r = 18;
+    const pts = [[0,0]];
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      pts.push([Math.cos(a)*r, Math.sin(a)*r]);
+    }
+    for (let i = 0; i < 6; i++) {
+      const a = i * Math.PI / 3;
+      pts.push([Math.cos(a)*r*2, Math.sin(a)*r*2]);
+      const a2 = a + Math.PI/6;
+      pts.push([Math.cos(a2)*r*Math.sqrt(3), Math.sin(a2)*r*Math.sqrt(3)]);
+    }
+    pts.forEach(([x, y]) => {
+      const c = document.createElementNS(ns, 'circle');
+      c.setAttribute('cx', x); c.setAttribute('cy', y); c.setAttribute('r', r);
+      flower.appendChild(c);
+    });
+    const ring = document.createElementNS(ns, 'circle');
+    ring.setAttribute('cx', 0); ring.setAttribute('cy', 0); ring.setAttribute('r', r*3);
+    ring.setAttribute('stroke-width', '0.7');
+    flower.appendChild(ring);
+  })();
+
+  /* ─── Arc visualization ─── */
+  (function () {
+    const wrap = document.getElementById('arc-vis');
+    if (!wrap) return;
+    const stops = wrap.querySelector('#arc-stops');
+    const ns = 'http://www.w3.org/2000/svg';
+    const path = wrap.querySelector('#arc-ring');
+
+    function pointAt(t) {
+      const len = path.getTotalLength();
+      return path.getPointAtLength(len * t);
+    }
+    const STOPS = [
+      { t: 0.06, name: "Preparation",  it: false, sub: "7 days before" },
+      { t: 0.50, name: "Ceremony",     it: true,  sub: "the day" },
+      { t: 0.94, name: "Integration",  it: false, sub: "21 days after" },
+    ];
+    STOPS.forEach((s, i) => {
+      const p = pointAt(s.t);
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('class', 'stop' + (i === 1 ? ' active' : ''));
+      dot.setAttribute('cx', p.x); dot.setAttribute('cy', p.y); dot.setAttribute('r', 9);
+      stops.appendChild(dot);
+
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('class', 'stop-label');
+      label.setAttribute('x', p.x); label.setAttribute('y', p.y + 30);
+      label.setAttribute('text-anchor', 'middle');
+      label.textContent = s.sub.toUpperCase();
+      stops.appendChild(label);
+
+      const name = document.createElementNS(ns, 'text');
+      name.setAttribute('class', 'stop-name' + (s.it ? ' it' : ''));
+      name.setAttribute('x', p.x); name.setAttribute('y', p.y - 22);
+      name.setAttribute('text-anchor', 'middle');
+      name.textContent = s.name;
+      stops.appendChild(name);
+    });
+
+    const progress = wrap.querySelector('#arc-progress');
+    function onScroll() {
+      const rect = wrap.getBoundingClientRect();
+      const vh = window.innerHeight;
+      const start = vh * 0.85;
+      const end = vh * 0.15;
+      const passed = Math.max(0, Math.min(1, (start - rect.top) / (start - end + rect.height)));
+      progress.style.strokeDashoffset = (1 - passed).toFixed(3);
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  })();
+
+  /* ─── Reveal on scroll ─── */
+  const io = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    }
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  /* ─── Chapter tracking ─── */
+  (function () {
+    const chapters = document.querySelectorAll('[data-chapter]');
+    const bar = document.getElementById('bar');
+    const cursor = document.getElementById('cursor');
+    const setChapter = (n) => set('hud-chapter', n);
+    const tracker = new IntersectionObserver((entries) => {
+      const visible = entries.filter(e => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+      if (!visible.length) return;
+      const cur = visible[0].target;
+      setChapter(cur.dataset.chapter);
+      const dark = cur.hasAttribute('data-dark');
+      bar.classList.toggle('dark', dark);
+      if (cursor) cursor.classList.toggle('dark', dark);
+    }, { rootMargin: '-30% 0px -50% 0px', threshold: 0 });
+    chapters.forEach(c => tracker.observe(c));
+  })();
+
+  /* ─── Custom cursor + magnetic buttons ─── */
+  (function () {
+    const cursor = document.getElementById('cursor');
+    if (!cursor) return;
+    if (!matchMedia('(hover:hover) and (pointer:fine)').matches) return;
+    cursor.style.display = 'block';
+    let x = 0, y = 0, tx = 0, ty = 0;
+    window.addEventListener('mousemove', (e) => { tx = e.clientX; ty = e.clientY; });
+    function tick() {
+      x += (tx - x) * 0.18;
+      y += (ty - y) * 0.18;
+      cursor.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%)`;
+      requestAnimationFrame(tick);
+    }
+    tick();
+    document.querySelectorAll('a, button, [role="button"], .ds').forEach(el => {
+      el.addEventListener('mouseenter', () => cursor.classList.add('hover'));
+      el.addEventListener('mouseleave', () => cursor.classList.remove('hover'));
+    });
+
+    document.querySelectorAll('[data-magnetic]').forEach(btn => {
+      btn.addEventListener('mousemove', (e) => {
+        const rect = btn.getBoundingClientRect();
+        const dx = (e.clientX - (rect.left + rect.width / 2)) * 0.25;
+        const dy = (e.clientY - (rect.top + rect.height / 2)) * 0.25;
+        btn.style.transform = `translate(${dx}px, ${dy}px)`;
+      });
+      btn.addEventListener('mouseleave', () => { btn.style.transform = ''; });
+    });
+  })();
+
+  /* ─── Lang toggle ─── */
+  document.getElementById('lang').addEventListener('click', (e) => {
+    e.currentTarget.textContent = e.currentTarget.textContent === 'EN · DE' ? 'DE · EN' : 'EN · DE';
+  });
+})();
+</script>
+
+</body>
+</html>
